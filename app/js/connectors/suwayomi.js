@@ -4,6 +4,7 @@
 import { send, cached, memo, unauthorized, normTitle, AuthError, ApiError, OfflineError } from '../net.js';
 import { idb } from '../idb.js';
 import { Q } from './suwayomi-queries.js';
+import { CAP } from './contract.js';
 
 const STATUS = { ONGOING: 'ONGOING', COMPLETED: 'ENDED', PUBLISHING_FINISHED: 'ENDED', CANCELLED: 'ABANDONED', ON_HIATUS: 'HIATUS' };
 const TOKEN_COOKIE = 'suwayomi-server-token';   // lu directement par Suwayomi (mode « UI login »)
@@ -173,6 +174,10 @@ export function createSuwayomi({ base }) {
     code: 's',
     label: 'Suwayomi',
     userLabel: 'Identifiant',
+    capabilities: [
+      CAP.SERIES_LIST, CAP.SERIES_SEARCH, CAP.CHAPTER_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_READ, CAP.PROGRESS_WRITE,
+      CAP.CHAPTER_DOWNLOAD, CAP.SETTINGS_STORE,
+    ],
 
     // ── Session ──
     async session() {

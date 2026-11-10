@@ -38,6 +38,14 @@ export async function more(root) {
       return h('div.server-row',
         h('label.check', toggle, h('span', h('strong', s.label),
           h('small', s.state === 'ok' && s.user ? t('Connecté en tant que {name}', { name: s.user }) : t(STATE[s.state])))),
+        s.enabled ? h('button.btn.small', { type: 'button', onclick: async (e) => {
+          e.currentTarget.disabled = true;
+          const r = await api.test(s.id);
+          toast(r.state === 'ok' ? t('{server} répond en {ms} ms.', { server: s.label, ms: r.ms })
+            : r.state === 'auth' ? t('{server} répond, mais demande une connexion.', { server: s.label })
+              : t('{server} ne répond pas. Vérifiez qu’il est démarré et joignable.', { server: s.label }));
+          after();
+        } }, t('Tester')) : null,
         s.state === 'ok' && s.user
           ? h('button.btn.small', { type: 'button', onclick: async () => {
             if (usable.length === 1) await push.disable().catch(() => {});

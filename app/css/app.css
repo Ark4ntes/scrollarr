@@ -326,6 +326,8 @@ body:has(.login) { padding-bottom: 0; }
 .login-foot { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
 .server-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
 .server-row .check span { display: flex; flex-direction: column; }
+.server-row { flex-wrap: wrap; }
+.server-row .check { flex: 1 1 180px; }
 .server-row .btn { white-space: nowrap; flex: none; }
 .server-row small { color: var(--tone); font-size: 13px; }
 .panel .field .select select { max-width: 100%; width: 100%; }

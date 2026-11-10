@@ -5,6 +5,7 @@
 // Chaque identifiant porte le code de son serveur en préfixe (« s:12 »,
 // « k:0ABC… ») ; les connecteurs, eux, ne voient que leurs identifiants bruts.
 import { CONNECTORS } from './connectors/index.js';
+import { CAP, validate } from './connectors/contract.js';
 import { events, isReachable, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
 import { idb } from './idb.js';
 
@@ -19,7 +20,7 @@ const DEDUPE_KEY = 'scrollarr.dedupe';
 const readJson = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
 
 /** { c: connecteur, available, enabled, state: 'off' | 'ok' | 'offline' | 'auth' | 'down', user } */
-const servers = CONNECTORS.map((def) => ({ c: def.create({ base: base + def.path }), available: false, enabled: false, state: 'off', user: null }));
+const servers = CONNECTORS.map((def) => ({ c: validate(def.create({ base: base + def.path })), available: false, enabled: false, state: 'off', user: null }));
 const usable = (s) => s.state === 'ok' || s.state === 'offline';
 
 // ───────────── Choix et état des serveurs ─────────────
@@ -74,7 +75,20 @@ function active() {
 export const serverList = () => servers.map((s) => ({
   id: s.c.id, label: s.c.label, userLabel: s.c.userLabel,
   available: s.available, enabled: s.enabled, state: s.state, user: s.user, primary: s.c.id === primaryId(),
+  capabilities: s.c.capabilities,
 }));
+/** Vrai si le serveur auquel appartient cet identifiant annonce la capacité demandée. */
+export const can = (id, capability) => find(id).capabilities.includes(capability);
+export { CAP };
+
+/** Revérifie un serveur à la demande et mesure son temps de réponse. */
+export async function test(serverId) {
+  const s = servers.find((x) => x.c.id === serverId);
+  const start = performance.now();
+  await check(s);
+  if (s.state !== 'down') forgetServer(serverId);
+  return { state: s.state, ms: Math.round(performance.now() - start) };
+}
 export const multi = () => active().length > 1;
 /** Change dès que l'ensemble des serveurs utilisés (ou la règle des doublons) change. */
 export const signature = () => active().map((c) => c.id).join('+') + (dedupe() ? '' : '+all');
@@ -353,7 +367,7 @@ export const markSeriesUnread = changing('markSeriesUnread');
 
 // ───────────── Téléchargement côté serveur (si le serveur sait le faire) ─────────────
 
-export const canServerDownload = (id) => typeof find(id).serverDownload === 'function';
+export const canServerDownload = (id) => can(id, CAP.CHAPTER_DOWNLOAD);
 export async function serverDownload(bookIds) {
   if (!bookIds.length) return;
   const [c] = route(bookIds[0]);
@@ -383,9 +397,19 @@ function join(map, key) {
 const written = new Map(); // « serveur clé » → dernière valeur écrite, pour ne renvoyer que ce qui change
 
 /** Tous les documents dont la clé commence par `prefix` : { idServeur: { clé: texte } }. */
+const stores = (c) => c.capabilities.includes(CAP.SETTINGS_STORE);
+/** Comme gather, mais limité aux serveurs qui offrent un stockage clé-valeur. */
+async function gatherStores(fn) {
+  const list = active().filter(stores);
+  if (!list.length) return [];
+  const results = await Promise.allSettled(list.map((c) => fn(c)));
+  if (results.every((r) => r.status === 'rejected')) throw results[0].reason;
+  return results.flatMap((r, i) => (r.status === 'fulfilled' ? [[list[i], r.value]] : []));
+}
+
 export async function loadDocs(prefix) {
   const out = {};
-  for (const [c, map] of await gather((c) => c.getSettings(prefix))) {
+  for (const [c, map] of await gatherStores((c) => c.getSettings(prefix))) {
     for (const [k, v] of Object.entries(map)) written.set(`${c.id} ${k}`, v);
     out[c.id] = Object.fromEntries(Object.keys(map).filter((k) => !isChunk(k) || !(k.replace(/\.c\d+$/, '') in map)).map((k) => [k, join(map, k)]));
   }
@@ -393,7 +417,7 @@ export async function loadDocs(prefix) {
 }
 /** Écrit un document sur un serveur (ou sur tous les serveurs actifs si serverId est absent). */
 export async function saveDoc(serverId, key, text) {
-  const targets = active().filter((c) => !serverId || c.id === serverId);
+  const targets = active().filter((c) => stores(c) && (!serverId || c.id === serverId));
   if (!targets.length) throw new OfflineError('Serveur non disponible');
   const results = await Promise.allSettled(targets.map(async (c) => {
     for (const [k, v] of split(key, text)) {
@@ -405,7 +429,7 @@ export async function saveDoc(serverId, key, text) {
   if (results.every((r) => r.status === 'rejected')) throw results[0].reason;
 }
 export async function deleteDocs(prefix) {
-  for (const [c, map] of await gather((c) => c.getSettings(prefix))) {
+  for (const [c, map] of await gatherStores((c) => c.getSettings(prefix))) {
     const keys = Object.keys(map);
     if (keys.length) await c.deleteSettings(keys).catch(() => {});
     keys.forEach((k) => written.delete(`${c.id} ${k}`));

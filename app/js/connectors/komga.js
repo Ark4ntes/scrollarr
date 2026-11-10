@@ -3,6 +3,7 @@
 // l'application : ce connecteur les renvoie donc presque tels quels.
 import { send, cached, unauthorized, qs, AuthError, ApiError } from '../net.js';
 import { idb } from '../idb.js';
+import { CAP } from './contract.js';
 
 const SORTS = { title: 'metadata.titleSort,asc', updated: 'lastModified,desc', added: 'created,desc' };
 const is = (value) => ({ operator: 'is', value });
@@ -33,6 +34,7 @@ export function createKomga({ base }) {
     code: 'k',
     label: 'Komga',
     userLabel: 'Adresse e-mail',
+    capabilities: [CAP.SERIES_LIST, CAP.SERIES_SEARCH, CAP.CHAPTER_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_READ, CAP.PROGRESS_WRITE, CAP.SETTINGS_STORE],
 
     // ── Session ──
     async session() {
