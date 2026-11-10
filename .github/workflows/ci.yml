@@ -20,6 +20,8 @@ jobs:
         run: tests/check_syntax.sh
       - name: Merge rules (unit)
         run: node tests/unit_sync.mjs
+      - name: Connector contracts (unit)
+        run: node tests/unit_contracts.mjs
 
   e2e:
     name: e2e

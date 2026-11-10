@@ -1,9 +1,9 @@
-// Connecteur Komga (https://komga.org) — API REST.
+// Lecteur Komga (https://komga.org) — API REST.
 // Les objets de Komga (séries, livres) servent de modèle commun à
 // l'application : ce connecteur les renvoie donc presque tels quels.
-import { send, cached, unauthorized, qs, AuthError, ApiError } from '../net.js';
-import { idb } from '../idb.js';
-import { CAP } from './contract.js';
+import { send, cached, unauthorized, qs, AuthError, ApiError } from '../../net.js';
+import { idb } from '../../idb.js';
+import { CAP } from '../contract.js';
 
 const SORTS = { title: 'metadata.titleSort,asc', updated: 'lastModified,desc', added: 'created,desc' };
 const is = (value) => ({ operator: 'is', value });

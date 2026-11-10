@@ -1,5 +1,5 @@
 // Imitation de Suwayomi-Server pour le serveur de démonstration (voir mock-servers.mjs).
-// Répond aux opérations GraphQL envoyées par app/js/connectors/suwayomi.js et
+// Répond aux opérations GraphQL envoyées par app/js/connectors/readers/suwayomi.js (et collectors/suwayomi.js) et
 // reproduit les quatre modes d'authentification de Suwayomi.
 //
 //   SUWA_AUTH=none|basic|simple|ui   mode d'authentification (défaut : none)

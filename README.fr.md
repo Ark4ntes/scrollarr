@@ -72,7 +72,7 @@ L'application est du JavaScript natif en modules ES, sans étape de compilation 
 | Dossier | Rôle |
 | --- | --- |
 | `app/` | L'application (HTML, CSS, JS, service worker) |
-| `app/js/connectors/` | Un module par type de serveur |
+| `app/js/connectors/` | Connecteurs, rangés par rôle : `readers/` (ce qu'on lit) et `collectors/` (ce qui va chercher les chapitres) |
 | `nginx/` | Configuration du serveur web et des proxys |
 | `notifier/` | Petit service Node qui envoie les notifications push |
 | `dev/` | Faux serveurs pour développer, script de vérification |
@@ -153,7 +153,7 @@ Le serveur de démonstration imite Suwayomi et Komga avec une bibliothèque fabr
 Points d'entrée utiles :
 
 - `app/js/api.js` : la façade appelée par les écrans ; répartit vers les connecteurs et fusionne les listes.
-- `app/js/connectors/` : `komga.js` (REST), `suwayomi.js` et `suwayomi-queries.js` (GraphQL).
+- `app/js/connectors/readers/` : `komga.js` (REST), `suwayomi.js` (GraphQL). `collectors/suwayomi.js` demande à Suwayomi de télécharger des chapitres. Les deux modules Suwayomi partagent `suwayomi-client.js` (session, requêtes) et `suwayomi-queries.js`.
 - `app/js/profiles.js` : les profils et leur historique.
 - `app/js/views/reader.js` : le lecteur.
 - `app/js/i18n.js` : les traductions (le français sert de clé ; ajoutez un dictionnaire pour une nouvelle langue).
@@ -166,7 +166,7 @@ Un connecteur est une fonction `create({ base })` qui renvoie un objet. `base` e
 | Membre | Rôle |
 | --- | --- |
 | `id`, `code`, `label`, `userLabel` | Identifiant, préfixe d'une lettre, nom affiché, libellé du champ identifiant |
-| `capabilities` | Ce que le serveur sait faire, parmi la liste de `app/js/connectors/contract.js` ; l'interface ne propose que ce qui est déclaré |
+| `capabilities` | Ce que le serveur sait faire, parmi les capacités « lecteurs » de `app/js/connectors/contract.js` ; l'interface ne propose que ce qui est déclaré |
 | `session()`, `login(user, password)`, `logout()` | Session ; `session()` lève `AuthError` si une connexion est requise |
 | `libraries()`, `genres()` | Filtres de la bibliothèque |
 | `seriesList({ libraryId, genre, readStatus, search, sort, page, size })` | Renvoie `{ content, last }` |
@@ -176,11 +176,24 @@ Un connecteur est une fonction `create({ base })` qui renvoie un objet. `base` e
 | `seriesThumb(id)`, `bookThumb(id)` | Adresses des couvertures |
 | `saveProgress(id, page, completed)`, `markBookRead/Unread(id)`, `markSeriesRead/Unread(id)` | Progression |
 | `getSettings(prefix)`, `setSetting(key, value)`, `deleteSettings(keys)` | Petit stockage clé-valeur côté serveur (abonnements, profils) |
-| `serverDownload(ids)` | Seulement avec la capacité `chapter.download` |
 
-Le contrat est vérifié au démarrage par `validate()` dans `app/js/connectors/contract.js` : un connecteur incomplet échoue tout de suite au lieu de mal se comporter plus tard.
+Le contrat est vérifié au démarrage par `validateReader()` dans `app/js/connectors/reader-contract.js` : un connecteur incomplet échoue tout de suite au lieu de mal se comporter plus tard.
 
-Il reste à l'inscrire dans `app/js/connectors/index.js`, à ajouter son proxy et sa ligne `servers.json` dans `nginx/default.conf.template`, et les adresses de ses pages et couvertures dans `app/sw.js` (lecture hors ligne).
+Il reste à l'inscrire sous `READERS` dans `app/js/connectors/index.js`, à ajouter son proxy et sa ligne `servers.json` dans `nginx/default.conf.template`, et les adresses de ses pages et couvertures dans `app/sw.js` (lecture hors ligne).
+
+### Écrire un collecteur
+
+Un collecteur va chercher des chapitres ; il n'a pas à lister une bibliothèque ni à servir des pages. Il se range dans `app/js/connectors/collectors/` et suit `collector-contract.js`, vérifié au démarrage par `validateCollector()`.
+
+| Membre | Rôle |
+| --- | --- |
+| `id`, `label` | Identifiant et nom affiché |
+| `capabilities` | Parmi les capacités « collecteurs » de `contract.js` (aujourd'hui : `collect.chapters`) |
+| `serves` | Lecteurs dont il comprend les identifiants de chapitre (`['suwayomi']`) ; vide s'il n'en partage avec aucun |
+| `session` | Nom du lecteur dont il réutilise la session. Sans cela, le collecteur a son propre serveur et fournit `session()`, `login()`, `logout()` |
+| `collectChapters(readerId, chapterIds)` | Avec `collect.chapters` : récupérer des chapitres désignés par les identifiants de ce lecteur |
+
+Il s'inscrit sous `COLLECTORS` dans `app/js/connectors/index.js`. Seule `collect.chapters` existe pour l'instant : un collecteur qui part d'une recherche par titre plutôt que des identifiants d'un lecteur (Tranga, par exemple) demandera une nouvelle capacité, et les écrans qui vont avec.
 
 ## État du projet et limites connues
 

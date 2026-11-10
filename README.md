@@ -72,7 +72,7 @@ The app is plain JavaScript in ES modules with no build step: what is in `app/` 
 | Folder | Role |
 | --- | --- |
 | `app/` | The application (HTML, CSS, JS, service worker) |
-| `app/js/connectors/` | One module per kind of server |
+| `app/js/connectors/` | Connectors, split by role: `readers/` (what you read) and `collectors/` (what fetches chapters) |
 | `nginx/` | Web server and proxy configuration |
 | `notifier/` | Small Node service that sends push notifications |
 | `dev/` | Mock servers for development, compatibility checker |
@@ -155,7 +155,7 @@ The demo server imitates Suwayomi and Komga with a generated library.
 Useful entry points:
 
 - `app/js/api.js`: the facade the screens call; routes to connectors and merges lists.
-- `app/js/connectors/`: `komga.js` (REST), `suwayomi.js` and `suwayomi-queries.js` (GraphQL).
+- `app/js/connectors/readers/`: `komga.js` (REST), `suwayomi.js` (GraphQL). `collectors/suwayomi.js` asks Suwayomi to download chapters. Both Suwayomi modules share `suwayomi-client.js` (session, requests) and `suwayomi-queries.js`.
 - `app/js/profiles.js`: profiles and their history.
 - `app/js/views/reader.js`: the reader.
 - `app/js/i18n.js`: translations (French strings are the keys; add a dictionary for a new language).
@@ -170,7 +170,7 @@ A connector is a `create({ base })` function returning an object. `base` is the 
 | Member | Role |
 | --- | --- |
 | `id`, `code`, `label`, `userLabel` | Identifier, one-letter prefix, display name, label of the username field |
-| `capabilities` | What the server can do, from the list in `app/js/connectors/contract.js`; the interface only offers what is declared |
+| `capabilities` | What the server can do, from the reader list in `app/js/connectors/contract.js`; the interface only offers what is declared |
 | `session()`, `login(user, password)`, `logout()` | Session; `session()` throws `AuthError` when sign-in is required |
 | `libraries()`, `genres()` | Library filters |
 | `seriesList({ libraryId, genre, readStatus, search, sort, page, size })` | Returns `{ content, last }` |
@@ -180,11 +180,24 @@ A connector is a `create({ base })` function returning an object. `base` is the 
 | `seriesThumb(id)`, `bookThumb(id)` | Cover URLs |
 | `saveProgress(id, page, completed)`, `markBookRead/Unread(id)`, `markSeriesRead/Unread(id)` | Progress |
 | `getSettings(prefix)`, `setSetting(key, value)`, `deleteSettings(keys)` | Small key-value store on the server (subscriptions, profiles) |
-| `serverDownload(ids)` | Only with the `chapter.download` capability |
 
-The contract is checked at startup by `validate()` in `app/js/connectors/contract.js`: an incomplete connector fails loudly instead of misbehaving later.
+The contract is checked at startup by `validateReader()` in `app/js/connectors/reader-contract.js`: an incomplete connector fails loudly instead of misbehaving later.
 
-Then register it in `app/js/connectors/index.js`, add its proxy and its `servers.json` entry in `nginx/default.conf.template`, and the URL patterns of its pages and covers in `app/sw.js` (offline reading).
+Then register it under `READERS` in `app/js/connectors/index.js`, add its proxy and its `servers.json` entry in `nginx/default.conf.template`, and the URL patterns of its pages and covers in `app/sw.js` (offline reading).
+
+### Writing a collector
+
+A collector fetches chapters; it does not have to list a library or serve pages. It lives in `app/js/connectors/collectors/` and follows `collector-contract.js`, checked at startup by `validateCollector()`.
+
+| Member | Role |
+| --- | --- |
+| `id`, `label` | Identifier and displayed name |
+| `capabilities` | From the collector list in `contract.js` (today: `collect.chapters`) |
+| `serves` | Readers whose chapter identifiers it understands (`['suwayomi']`); empty if it shares identifiers with none |
+| `session` | Name of the reader whose session it reuses. Without it, the collector has its own server and provides `session()`, `login()`, `logout()` |
+| `collectChapters(readerId, chapterIds)` | With `collect.chapters`: fetch chapters designated by that reader's identifiers |
+
+Register it under `COLLECTORS` in `app/js/connectors/index.js`. Only `collect.chapters` exists so far: a collector that works from a title search rather than a reader's identifiers (Tranga, for instance) will need a new capability, and screens to go with it.
 
 ## Project status and known limits
 

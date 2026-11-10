@@ -24,6 +24,7 @@ python tests/e2e_profiles.py    # reading profiles (~2.5 min)
 python tests/e2e_merge.py       # two devices on the same profile, server test button (~30 s)
 python tests/e2e_sync.py        # same-revision ties, skewed clocks, change during a slow write, subscriptions (~1.5 min)
 node tests/unit_sync.mjs        # merge rules alone, no browser (instant)
+node tests/unit_contracts.mjs   # reader and collector contracts (instant)
 ```
 
 Each script prints `PASS`/`FAIL` lines, then `ALL PASS` or `SOME FAILED`. The exit status is 0 only if every check passed and no exception occurred; demo servers are always stopped.

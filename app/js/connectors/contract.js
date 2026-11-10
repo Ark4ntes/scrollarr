@@ -1,57 +1,46 @@
-// Contrat commun des connecteurs : ce que la façade (api.js) attend de chaque
-// serveur. Un connecteur est un objet créé par `create({ base })`, où `base`
-// est le préfixe de son proxy (« /komga »). Les identifiants qu'il manipule
-// sont ceux de son serveur ; la façade se charge de les préfixer.
+// Ce que tous les connecteurs ont en commun, quel que soit leur rôle.
+//
+// Scrollarr distingue deux rôles, décrits chacun par son propre contrat :
+//  - un LECTEUR (reader-contract.js) fournit des séries, des chapitres, des
+//    pages et une progression : c'est ce qu'on lit ;
+//  - un COLLECTEUR (collector-contract.js) va chercher des chapitres pour les
+//    mettre à disposition d'un lecteur : c'est ce qui alimente la bibliothèque.
+// Un même logiciel peut tenir les deux rôles (Suwayomi) : il a alors deux
+// modules, un dans readers/ et un dans collectors/, qui ne se connaissent pas.
 
 /**
  * Capacités qu'un connecteur peut déclarer. L'interface ne propose une action
- * que si le serveur concerné l'annonce : on signale ce qui manque, on ne le
- * simule pas.
+ * que si un connecteur l'annonce : on signale ce qui manque, on ne le simule pas.
  */
 export const CAP = Object.freeze({
+  // ── Lecteurs ──
   SERIES_LIST: 'series.list',
   SERIES_SEARCH: 'series.search',
   CHAPTER_LIST: 'chapter.list',
   CHAPTER_READ: 'chapter.read',
   PROGRESS_READ: 'chapter.progress.read',
   PROGRESS_WRITE: 'chapter.progress.write',
-  /** Demander au serveur de télécharger des chapitres (méthode `serverDownload`). */
-  CHAPTER_DOWNLOAD: 'chapter.download',
   /** Petit stockage clé-valeur côté serveur : abonnements et profils y sont rangés. */
   SETTINGS_STORE: 'settings.store',
+  // ── Collecteurs ──
+  /** Récupérer des chapitres déjà connus d'un lecteur (méthode `collectChapters`). */
+  COLLECT_CHAPTERS: 'collect.chapters',
 });
 
-/** Membres exigés de tout connecteur. */
-const ALWAYS = [
-  'id', 'code', 'label', 'userLabel', 'capabilities',
-  'session', 'login', 'logout',
-  'libraries', 'genres',
-  'seriesList', 'seriesNew', 'seriesUpdated', 'series', 'seriesBooks',
-  'booksLatest', 'booksOnDeck', 'booksInProgress', 'booksRecentlyRead',
-  'book', 'bookPages', 'nextBook', 'previousBook',
-  'seriesThumb', 'bookThumb',
-];
-/** Membres exigés seulement si la capacité correspondante est déclarée. */
-const WHEN = {
-  [CAP.PROGRESS_WRITE]: ['saveProgress', 'markBookRead', 'markBookUnread', 'markSeriesRead', 'markSeriesUnread'],
-  [CAP.CHAPTER_DOWNLOAD]: ['serverDownload'],
-  [CAP.SETTINGS_STORE]: ['getSettings', 'setSetting', 'deleteSettings'],
-};
-const KNOWN = new Set(Object.values(CAP));
-
 /**
- * Vérifie qu'un connecteur respecte le contrat et le renvoie. Appelé une fois
- * au démarrage : une erreur ici signale un connecteur incomplet, pas une panne.
+ * Vérification partagée par les deux contrats.
+ *  - always : membres exigés de tout connecteur de ce rôle ;
+ *  - when   : membres exigés seulement si la capacité est déclarée ;
+ *  - allowed: capacités que ce rôle a le droit de déclarer.
  */
-export function validate(connector) {
-  const name = connector?.id || '(sans id)';
-  const missing = ALWAYS.filter((m) => connector?.[m] === undefined || connector[m] === null);
+export function check(role, connector, { always, when, allowed }) {
+  const name = `${role} ${connector?.id || '(sans id)'}`;
+  const missing = always.filter((m) => connector?.[m] === undefined || connector[m] === null);
   const caps = Array.isArray(connector?.capabilities) ? connector.capabilities : [];
   for (const cap of caps) {
-    if (!KNOWN.has(cap)) throw new Error(`Connecteur ${name} : capacité inconnue « ${cap} »`);
-    missing.push(...(WHEN[cap] || []).filter((m) => typeof connector[m] !== 'function'));
+    if (!allowed.includes(cap)) throw new Error(`${name} : capacité « ${cap} » inconnue pour ce rôle`);
+    missing.push(...(when[cap] || []).filter((m) => typeof connector[m] !== 'function'));
   }
-  if (!/^[a-z]$/.test(connector?.code || '')) missing.push('code (une lettre minuscule)');
-  if (missing.length) throw new Error(`Connecteur ${name} incomplet : ${missing.join(', ')}`);
+  if (missing.length) throw new Error(`${name} incomplet : ${missing.join(', ')}`);
   return connector;
 }

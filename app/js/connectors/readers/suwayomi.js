@@ -1,15 +1,12 @@
-// Connecteur Suwayomi-Server (https://github.com/Suwayomi/Suwayomi-Server) — API GraphQL.
+// Lecteur Suwayomi-Server (https://github.com/Suwayomi/Suwayomi-Server) — API GraphQL.
 // Traduit les mangas et chapitres de Suwayomi vers le modèle commun de
 // l'application (celui de Komga : séries, livres, progression).
-import { send, cached, memo, unauthorized, normTitle, AuthError, ApiError, OfflineError } from '../net.js';
-import { idb } from '../idb.js';
-import { Q } from './suwayomi-queries.js';
-import { CAP } from './contract.js';
+import { cached, memo, normTitle, AuthError, OfflineError } from '../../net.js';
+import { idb } from '../../idb.js';
+import { CAP } from '../contract.js';
+import { suwayomiClient, TOKEN_COOKIE, BASIC_COOKIE, REFRESH_KEY } from '../suwayomi-client.js';
 
 const STATUS = { ONGOING: 'ONGOING', COMPLETED: 'ENDED', PUBLISHING_FINISHED: 'ENDED', CANCELLED: 'ABANDONED', ON_HIATUS: 'HIATUS' };
-const TOKEN_COOKIE = 'suwayomi-server-token';   // lu directement par Suwayomi (mode « UI login »)
-const BASIC_COOKIE = 'scrollarr_suwa_basic';    // converti en en-tête Authorization par le proxy
-const REFRESH_KEY = 'scrollarr.suwayomi.refresh';
 const USER_KEY = 'scrollarr.suwayomi.user';
 
 const num = (v) => Number(v) || 0;
@@ -18,75 +15,9 @@ const desc = (get) => (a, b) => (get(b) || '').localeCompare(get(a) || '');
 
 export function createSuwayomi({ base }) {
   const ID = 'suwayomi';
-  const appPath = new URL('.', location.href).pathname;
 
-  // ── Authentification ──
-  function setCookie(name, value) {
-    const secure = location.protocol === 'https:' ? '; Secure' : '';
-    document.cookie = value === null
-      ? `${name}=; Path=${appPath}; Max-Age=0; SameSite=Strict${secure}`
-      : `${name}=${value}; Path=${appPath}; Max-Age=31536000; SameSite=Strict${secure}`;
-  }
-  function clearAuth() {
-    setCookie(TOKEN_COOKIE, null);
-    setCookie(BASIC_COOKIE, null);
-    localStorage.removeItem(REFRESH_KEY);
-    clearTimeout(refreshTimer);
-  }
-
-  let refreshTimer = 0;
-  /** Renouvelle le jeton un peu avant son expiration, pour que les images continuent de se charger. */
-  function scheduleRefresh(token) {
-    clearTimeout(refreshTimer);
-    try {
-      const { exp } = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      const wait = exp * 1000 - Date.now() - 30000;
-      refreshTimer = setTimeout(() => refresh().catch(() => {}), Math.min(Math.max(wait, 5000), 2 ** 31 - 1));
-    } catch { /* jeton illisible : le renouvellement se fera à la première erreur */ }
-  }
-  let refreshing = null;
-  function refresh() {
-    refreshing ??= (async () => {
-      const token = localStorage.getItem(REFRESH_KEY);
-      if (!token) throw new AuthError('Non connecté');
-      // Un jeton expiré envoyé en cookie pourrait faire rejeter la demande de renouvellement elle-même.
-      setCookie(TOKEN_COOKIE, null);
-      const data = await raw('Refresh', { token });
-      setCookie(TOKEN_COOKIE, data.refreshToken.accessToken);
-      scheduleRefresh(data.refreshToken.accessToken);
-    })().finally(() => { refreshing = null; });
-    return refreshing;
-  }
-
-  /** Une requête GraphQL, sans reprise automatique. Lève AuthError si la session est refusée. */
-  async function raw(op, variables, { timeout, keepalive } = {}) {
-    const res = await send(ID, base + '/api/graphql', {
-      method: 'POST', body: { operationName: op, query: Q[op], variables }, timeout, keepalive,
-    });
-    if (res.status === 401) { const e = new AuthError('Non connecté'); e.http = true; throw e; }
-    if (!res.ok) throw new ApiError(res.status);
-    const json = await res.json();
-    if (json.errors?.length) {
-      const message = json.errors.map((e) => e.message).join(' ; ');
-      if (/unauthori[sz]ed/i.test(message)) throw new AuthError('Non connecté');
-      throw new ApiError(400, message);
-    }
-    return json.data;
-  }
-
-  /** Requête avec renouvellement du jeton si nécessaire. */
-  async function gql(op, variables, opts = {}) {
-    try {
-      return await raw(op, variables, opts);
-    } catch (e) {
-      if (!(e instanceof AuthError)) throw e;
-      if (localStorage.getItem(REFRESH_KEY)) {
-        try { await refresh(); return await raw(op, variables, opts); } catch (e2) { if (!(e2 instanceof AuthError)) throw e2; }
-      }
-      throw opts.quiet ? e : unauthorized(ID);
-    }
-  }
-  const read = (op, variables) => cached(`${ID} ${op} ${JSON.stringify(variables || {})}`, () => gql(op, variables));
+  const client = suwayomiClient(base);
+  const { raw, gql, read, setCookie, clearAuth, scheduleRefresh } = client;
 
   // ── Traduction vers le modèle commun ──
   const parts = (bookId) => { const [mangaId, chapterId] = String(bookId).split('.'); return { mangaId: Number(mangaId), chapterId: Number(chapterId) }; };
@@ -160,6 +91,7 @@ export function createSuwayomi({ base }) {
   }
   const bookList = (nodes) => ({ content: nodes.map((c) => toBook(c, c.manga.title)) });
   const changed = () => short.clear();
+  client.onChange(changed);
 
   async function sibling(bookId, dir) {
     const { mangaId, chapterId } = parts(bookId);
@@ -176,7 +108,7 @@ export function createSuwayomi({ base }) {
     userLabel: 'Identifiant',
     capabilities: [
       CAP.SERIES_LIST, CAP.SERIES_SEARCH, CAP.CHAPTER_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_READ, CAP.PROGRESS_WRITE,
-      CAP.CHAPTER_DOWNLOAD, CAP.SETTINGS_STORE,
+      CAP.SETTINGS_STORE,
     ],
 
     // ── Session ──
@@ -338,11 +270,5 @@ export function createSuwayomi({ base }) {
     },
     setSetting: (key, value) => gql('SetMeta', { key, value }),
     async deleteSettings(keys) { for (const key of keys) await gql('DeleteMeta', { key }); },
-
-    // ── Propre à Suwayomi : demander au serveur de télécharger des chapitres ──
-    async serverDownload(bookIds) {
-      await gql('Enqueue', { ids: bookIds.map((id) => parts(id).chapterId) });
-      changed();
-    },
   };
 }
