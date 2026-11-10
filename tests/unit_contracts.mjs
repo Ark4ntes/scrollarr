@@ -46,6 +46,8 @@ test('collect.tasks needs tasks() and resolveTasks(); collect.cancel needs cance
   assert.ok(validateCollector(collector({ capabilities: caps, tasks: fn, resolveTasks: fn }), ['demo']));
   assert.throws(() => validateCollector(collector({ capabilities: [...caps, CAP.COLLECT_CANCEL], tasks: fn, resolveTasks: fn }), ['demo']), /cancelTask/);
   assert.throws(() => validateCollector(collector({ capabilities: [CAP.COLLECT_CHAPTERS, CAP.COLLECT_CANCEL], cancelTask: fn }), ['demo']), /collect\.tasks/);
+  assert.throws(() => validateCollector(collector({ capabilities: [...caps, CAP.COLLECT_RETRY], tasks: fn, resolveTasks: fn }), ['demo']), /retryTask/);
+  assert.throws(() => validateCollector(collector({ capabilities: [CAP.COLLECT_CHAPTERS, CAP.COLLECT_RETRY], retryTask: fn }), ['demo']), /collect\.tasks/);
 });
 
 console.log(failed ? `\n${failed} test(s) failed` : '\nAll contract unit tests passed');

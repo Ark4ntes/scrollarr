@@ -209,14 +209,15 @@ Un collecteur va chercher des chapitres ; il n'a pas à lister une bibliothèque
 | Membre | Rôle |
 | --- | --- |
 | `id`, `label` | Identifiant et nom affiché |
-| `capabilities` | Parmi les capacités « collecteurs » de `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`) |
+| `capabilities` | Parmi les capacités « collecteurs » de `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`) |
 | `serves` | Lecteurs dont il comprend les identifiants de chapitre (`['suwayomi']`) ; vide s'il n'en partage avec aucun |
 | `session` | Nom du lecteur dont il réutilise la session. Sans cela, le collecteur a son propre serveur et fournit `session()`, `login()`, `logout()` |
 | `collectChapters(readerId, chapterIds)` | Avec `collect.chapters` : récupérer des chapitres désignés par les identifiants de ce lecteur |
 | `tasks()`, `resolveTasks(nativeIds)` | Avec `collect.tasks` : ce que le collecteur fait en ce moment, et ce que sont devenues les tâches qu'il ne liste plus |
 | `cancelTask(nativeId)` | Avec `collect.cancel` |
+| `retryTask(nativeId)` | Avec `collect.retry` : relancer une tâche en échec ou annulée |
 
-Les tâches de tous les collecteurs sont ramenées à une seule forme par `app/js/tasks.js` : identifiant, collecteur, série et chapitre, état (`queued`, `running`, `done`, `failed`, `cancelled`), progression, dates de création, de début et de fin, erreur, nombre de tentatives, et possibilité d'annuler. L'application garde ce qu'un collecteur oublie (dates, tâches terminées). Elles sont listées dans Réglages, sous « Téléchargements sur le serveur ». Cet historique est propre à chaque appareil, et les dates que le collecteur ne fournit pas sont celles où l'application a constaté le changement.
+Les tâches de tous les collecteurs sont ramenées à une seule forme par `app/js/tasks.js` : identifiant, collecteur, série et chapitre, état (`queued`, `running`, `done`, `failed`, `cancelled`), progression, dates de création, de début et de fin, erreur, nombre de tentatives, et possibilité d'annuler. L'application garde ce qu'un collecteur oublie (dates, tâches terminées). Les réglages n'en montrent qu'un résumé (collecteurs, nombre de téléchargements actifs) ; le détail est sur un écran secondaire ouvert depuis là, avec les téléchargements en cours, la file d'attente, les erreurs et l'historique, et les actions d'annulation et de relance que chaque collecteur permet. La collecte n'a jamais d'onglet à elle : elle reste en arrière-plan tant qu'on ne vient pas la regarder. Cet historique est propre à chaque appareil, et les dates que le collecteur ne fournit pas sont celles où l'application a constaté le changement.
 
 Il s'inscrit sous `COLLECTORS` dans `app/js/connectors/index.js`. Il n'existe pas encore de moyen de lancer une collecte à partir d'un titre : un collecteur qui part d'une recherche par titre plutôt que des identifiants d'un lecteur (Tranga, par exemple) demandera une nouvelle capacité, et les écrans qui vont avec.
 

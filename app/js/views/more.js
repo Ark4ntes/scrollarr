@@ -3,7 +3,7 @@ import * as store from '../store.js';
 import * as downloads from '../downloads.js';
 import * as push from '../push.js';
 import * as profiles from '../profiles.js';
-import { h, toast, fmtBytes, fmtAgo, add, fill } from '../ui.js';
+import { h, toast, fmtBytes, add, fill, icon } from '../ui.js';
 import { t } from '../i18n.js';
 import { topbar } from '../components.js';
 import { go, refresh } from '../router.js';
@@ -69,48 +69,22 @@ export async function more(root) {
     return h('section.panel', h('h2', list.length > 1 ? t('Serveurs') : t('Serveur')), rows, both);
   }
 
-  // ── Tâches des collecteurs ──
-  const TASK_STATE = { queued: 'En attente', running: 'En cours', done: 'Terminée', failed: 'Échec', cancelled: 'Annulée' };
-  const taskBox = h('div.tasks');
-  function paintTasks() {
-    const list = api.tasks();
-    if (!list.length) return fill(taskBox, h('p.note', t('Aucune tâche. Les chapitres que vous demandez au serveur de télécharger apparaîtront ici.')));
-    fill(taskBox, list.slice(0, 30).map((task) => {
-      const active = task.state === 'queued' || task.state === 'running';
-      const when = task.finishedAt || task.startedAt || task.createdAt;
-      const detail = [
-        task.collectorLabel,
-        task.state === 'running' && task.progress !== null ? Math.round(task.progress * 100) + ' %' : t(TASK_STATE[task.state]),
-        task.attempts > 1 ? t('{n} tentatives', { n: task.attempts }) : null,
-        active ? null : fmtAgo(new Date(when).toISOString()),
-      ].filter(Boolean).join(', ');
-      return h('div.task', { 'data-state': task.state },
-        h('div.task-main',
-          h(task.seriesId ? 'a.task-title' : 'p.task-title', task.seriesId ? { href: `#/series/${task.seriesId}` } : {},
-            [task.seriesTitle, task.chapterTitle].filter(Boolean).join(' — ') || task.id),
-          h('p.task-meta', detail),
-          task.state === 'failed' && task.error ? h('p.task-error', t(task.error)) : null,
-          task.state === 'running' && task.progress !== null
-            ? h('progress', { max: 1, value: task.progress, 'aria-label': t('Progression') }) : null),
-        task.cancellable ? h('button.btn.small', { type: 'button', onclick: async (e) => {
-          e.currentTarget.disabled = true;
-          try { await api.cancelTask(task.id); toast(t('Tâche annulée')); }
-          catch { toast(t('Annulation impossible.')); }
-          api.refreshTasks().catch(() => {});
-        } }, t('Annuler')) : null);
-    }));
-  }
+  // ── Collecte : résumé seulement, le détail est sur son propre écran ──
+  const collectors = api.collectorList().filter((k) => k.usable);
+  const activeLabel = (n) => (n === 0 ? t('Aucun en cours') : n === 1 ? t('1 actif') : t('{n} actifs', { n }));
+  const activeCount = h('small', activeLabel(api.activeTaskCount()));
+  const paintCount = () => { activeCount.textContent = activeLabel(api.activeTaskCount()); };
   if (api.canTrackTasks()) {
-    paintTasks();
-    api.taskEvents.addEventListener('change', paintTasks);
-    // Suivi tant que l'écran est affiché ; plus rapproché quand quelque chose est en cours.
-    const poll = async () => {
-      if (!taskBox.isConnected) { api.taskEvents.removeEventListener('change', paintTasks); return; }
-      const list = await api.refreshTasks().catch(() => api.tasks());
-      setTimeout(poll, list.some((x) => x.state === 'queued' || x.state === 'running') ? 2000 : 15000);
-    };
-    setTimeout(poll, 0);
+    api.taskEvents.addEventListener('change', paintCount);
+    api.refreshTasks().catch(() => {});
   }
+  const collectPanel = collectors.length ? h('section.panel',
+    h('h2', collectors.length > 1 ? t('Collecteurs') : t('Collecteur')),
+    h('p.note', t('Un collecteur va chercher les chapitres chez leur source et les range sur le serveur.')),
+    collectors.map((k) => h('div.server-row', h('span.check', h('span', h('strong', k.label),
+      h('small', k.session ? t('Utilise la connexion à {server}', { server: k.session }) : t('Connecté')))))),
+    api.canTrackTasks() ? h('a.rowlink', { href: '#/more/downloads' },
+      h('span', h('strong', t('Téléchargements')), activeCount), icon('next', 20)) : null) : null;
 
   // ── Notifications ──
   const pushBox = h('div.field');
@@ -145,6 +119,7 @@ export async function more(root) {
   add(root, 
     topbar(t('Réglages'), { large: true }),
     serversPanel(),
+    collectPanel,
     h('section.panel',
       h('h2', t('Profil')),
       h('p.note', profiles.list().length > 1
@@ -155,8 +130,6 @@ export async function more(root) {
       h('h2', t('Affichage')),
       seg(t('Thème'), 'theme', [['auto', t('Comme l’appareil')], ['light', t('Clair')], ['dark', t('Sombre')]]),
       seg(t('Langue'), 'lang', [['auto', t('Comme l’appareil')], ['fr', 'Français'], ['en', 'English']], () => location.reload())),
-    api.canTrackTasks() ? h('section.panel', h('h2', t('Téléchargements sur le serveur')),
-      h('p.note', t('Chapitres que le serveur récupère chez la source. Ils restent sur le serveur : pour lire sans connexion, utilisez « Lecture hors ligne ».')), taskBox) : null,
     h('section.panel', h('h2', t('Notifications')), pushBox),
     h('section.panel',
       h('h2', t('Lecture hors ligne')),
