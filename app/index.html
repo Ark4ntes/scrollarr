@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Scrollarr</title>
+  <meta name="description" content="Lecteur vertical pour vos mangas auto-hébergés (Suwayomi, Komga).">
+  <meta name="theme-color" content="#F1F0F5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111017" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Scrollarr">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preload" href="fonts/BigShouldersDisplay.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="offline-banner" hidden></div>
+  <main id="view" tabindex="-1"></main>
+  <nav id="tabbar" hidden aria-label="Navigation principale"></nav>
+  <div id="toasts" aria-live="polite"></div>
+  <noscript>Scrollarr a besoin de JavaScript.</noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

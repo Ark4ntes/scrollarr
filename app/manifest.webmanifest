@@ -1,0 +1,22 @@
+{
+  "name": "Scrollarr",
+  "short_name": "Scrollarr",
+  "description": "Lecteur vertical pour vos mangas auto-hébergés (Suwayomi, Komga).",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#111017",
+  "theme_color": "#111017",
+  "categories": ["books", "entertainment"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Ma liste", "url": "./#/my", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Bibliothèque", "url": "./#/library", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

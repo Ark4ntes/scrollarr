@@ -1,0 +1,12 @@
+{
+  "name": "scrollarr-notifier",
+  "version": "0.2.0",
+  "description": "Notifications push de nouveaux chapitres pour Scrollarr",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "web-push": "^3.6.7" }
+}
