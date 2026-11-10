@@ -1,0 +1,75 @@
+name: Bug report
+description: Report something that does not work as expected
+title: "[Bug]: "
+labels:
+  - type:bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. **Do not paste API keys, passwords or tokens** in this issue, including in logs, screenshots or URLs. Replace them with `REDACTED` first.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest sequence that triggers the problem.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Scrollarr version
+      description: Shown in Settings > About.
+      placeholder: "0.3.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: server
+    attributes:
+      label: Server
+      description: Which server(s) were in use?
+      options:
+        - Suwayomi
+        - Komga
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      description: Version of Suwayomi and/or Komga.
+    validations:
+      required: false
+  - type: input
+    id: browser
+    attributes:
+      label: Browser / device
+      description: For example Firefox 130 on Windows, or Safari on iPhone 15 (installed to the home screen or not).
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Redact any API key, password or token before pasting.
+    validations:
+      required: false

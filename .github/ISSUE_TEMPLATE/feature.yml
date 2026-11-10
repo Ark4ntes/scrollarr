@@ -1,0 +1,74 @@
+name: Feature request
+description: Propose a new feature or an improvement
+title: "[Feature]: "
+labels:
+  - type:feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for proposing a feature. Do not paste API keys, passwords or tokens anywhere in this issue.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: Which problem does this change solve?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Current behaviour, servers concerned, constraints.
+    validations:
+      required: false
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Expected behaviour and the solution you have in mind.
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      description: Which parts of the project are concerned?
+      options:
+        - label: Frontend
+        - label: Connector
+        - label: Docker / DevOps
+        - label: Documentation
+        - label: Notifier
+        - label: Mobile
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: One checkable statement per line.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: Tests
+      description: Nominal cases, errors, offline use, regressions.
+    validations:
+      required: false
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Other issues, server APIs or versions required.
+    validations:
+      required: false
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What must not be handled in this issue.
+    validations:
+      required: false

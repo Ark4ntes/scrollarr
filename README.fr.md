@@ -190,7 +190,11 @@ Il reste à l'inscrire dans `app/js/connectors/index.js`, à ajouter son proxy e
 - Sur iOS, l'espace alloué aux téléchargements est décidé par le système et peut être repris si l'application n'est pas installée sur l'écran d'accueil.
 - Pas de lecture page par page (droite à gauche) : Scrollarr est volontairement un lecteur vertical.
 
+Politique de sécurité : [SECURITY.md](SECURITY.md). Guide de contribution : [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Suite envisagée
+
+La feuille de route complète et son état actuel figurent dans [docs/ROADMAP.md](docs/ROADMAP.md) (en français).
 
 - Applications iOS et Android en enveloppant ce même code avec [Capacitor](https://capacitorjs.com) ; il faudra alors remplacer les sessions de même origine par des jetons et charger les images par `fetch`.
 - Parcourir les sources de Suwayomi et ajouter un manga à la bibliothèque depuis Scrollarr.

@@ -194,7 +194,11 @@ Then register it in `app/js/connectors/index.js`, add its proxy and its `servers
 - On iOS, storage for downloads is decided by the system and may be reclaimed if the app is not installed on the home screen.
 - No paged (right-to-left) reading: Scrollarr is deliberately a vertical reader.
 
+Security policy: [SECURITY.md](SECURITY.md). Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Roadmap
+
+The full roadmap and its current status live in [docs/ROADMAP.md](docs/ROADMAP.md) (French).
 
 - A "folders" connector: read plain folders of images dropped on the server, without Suwayomi or Komga.
 - Connectors for other servers (Kavita…).

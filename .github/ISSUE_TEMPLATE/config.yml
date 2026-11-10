@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Ark4ntes/scrollarr/security/policy
+    about: Report vulnerabilities privately through the security policy. Do not open a public issue for them.
