@@ -1,0 +1,145 @@
+from _common import *   # ROOT, server, stop, check, shot, run, GQL
+
+
+def page(b, errs, scheme='dark'):
+    ctx=b.new_context(viewport={'width':390,'height':844}, device_scale_factor=2, is_mobile=True, has_touch=True, locale='fr-FR', color_scheme=scheme)
+    pg=ctx.new_page()
+    pg.on('pageerror', lambda e: errs.append(str(e)))
+    pg.on('console', lambda m: errs.append('console: '+m.text) if m.type=='error' and 'Failed to load resource' not in m.text else None)
+    return ctx, pg
+
+
+def scenario(b):
+
+    # ── A. Suwayomi seul, sans authentification ──
+    errs=[]; srv=server(8391, SERVERS='suwayomi'); B='http://localhost:8391'
+    ctx,pg=page(b,errs)
+    pg.goto(B+'/'); pg.wait_for_selector('.hero', timeout=8000); pg.wait_for_timeout(900)
+    check('A no login screen, home shown', '#/home' in pg.evaluate('location.hash') or pg.evaluate('location.hash')=='')
+    shot(pg,'30-suwa-home.png')
+    print('  rows:', pg.eval_on_selector_all('.row-head h2','e=>e.map(x=>x.textContent)'), '| hero:', pg.inner_text('.hero h2').replace('\n',' '), '/', pg.inner_text('.hero-sub'))
+    pg.click('a.tab[data-tab=library]'); pg.wait_for_selector('.grid .card'); pg.wait_for_timeout(500)
+    check('A library has 7 series', pg.locator('.grid .card').count()==7, pg.locator('.grid .card').count())
+    print('  chips:', pg.eval_on_selector_all('.chips .chip','e=>e.map(x=>x.textContent)'))
+    shot(pg,'31-suwa-library.png')
+    pg.select_option('.filters select >> nth=1','IN_PROGRESS'); pg.wait_for_timeout(600)
+    print('  in progress:', pg.eval_on_selector_all('.grid .card-title','e=>e.map(x=>x.textContent)'))
+    pg.select_option('.filters select >> nth=1',''); pg.wait_for_timeout(400)
+    pg.click('.grid .card >> text=Le Jardin des Automates'); pg.wait_for_selector('.eps .ep'); pg.wait_for_timeout(500)
+    shot(pg,'32-suwa-series.png')
+    cta=pg.inner_text('.cta .btn'); check('A series CTA resumes chapter 10', 'Reprendre le chapitre 10' in cta, cta)
+    print('  facts:', pg.eval_on_selector_all('.facts li','e=>e.map(x=>x.textContent)'), '| eps', pg.locator('.eps .ep').count(), '| read', pg.locator('.ep.read').count())
+    pg.click('.cta .btn'); pg.wait_for_selector('.pg.ok', timeout=8000); pg.wait_for_timeout(800)
+    cnt=pg.inner_text('.r-count'); check('A reader resumes at page 5', cnt.startswith('5 /'), cnt)
+    shot(pg,'33-suwa-reader.png')
+    pg.evaluate('scrollTo(0, document.documentElement.scrollHeight)'); pg.wait_for_selector('.nextcard'); pg.wait_for_timeout(2200)
+    bid=pg.evaluate('location.hash').split('/')[-1]; cid=int(bid.split('.')[-1])
+    ch=pg.evaluate(GQL,['Chapter',{'id':cid}])['data']['chapter']
+    check('A progress saved on Suwayomi (isRead)', ch['isRead'] is True, f"id={bid} lastPageRead={ch['lastPageRead']} pageCount={ch['pageCount']}")
+    pg.click('.nextcard'); pg.wait_for_selector('.pg.ok'); pg.wait_for_timeout(400)
+    check('A next chapter opens', 'Chapitre 11' in pg.inner_text('.r-chapter'), pg.inner_text('.r-chapter'))
+    pg.click('.rbar.top button[aria-label="Retour à la série"]'); pg.wait_for_selector('.eps .ep'); pg.wait_for_timeout(500)
+    check('A back to series, CTA moved on', 'chapitre 11' in pg.inner_text('.cta .btn'), pg.inner_text('.cta .btn'))
+    # chapitre non téléchargé sur le serveur (lecture en direct) + demande de téléchargement serveur
+    last=pg.locator('.eps .ep').last; last.scroll_into_view_if_needed(); last.locator('.ep-more').click(); pg.wait_for_selector('.sheet')
+    acts=pg.eval_on_selector_all('.sheet .action span:not(.ico)','e=>e.map(x=>x.textContent)'); check('A chapter menu offers server download', 'Télécharger sur le serveur' in acts, acts)
+    shot(pg,'34-suwa-chapter-menu.png')
+    pg.click('.action >> text=Télécharger sur le serveur'); pg.wait_for_timeout(600)
+    c22=[c for c in pg.evaluate(GQL,['Chapters',{'mangaId':3}])['data']['chapters']['nodes'] if c['sourceOrder']==22][0]
+    check('A server download enqueued', c22['isDownloaded'] is True)
+    pg.goto(B+'/#/read/s:3.%d' % [c for c in pg.evaluate(GQL,['Chapters',{'mangaId':3}])['data']['chapters']['nodes'] if c['sourceOrder']==20][0]['id']); pg.wait_for_selector('.pg.ok', timeout=8000)
+    check('A non-downloaded chapter reads online', pg.locator('.pg').count()>0, pg.inner_text('.r-count'))
+    # abonnement, UP, hors ligne
+    pg.goto(B+'/#/series/s:2'); pg.wait_for_selector('.eps .ep'); pg.click('.sactions .btn >> nth=0'); pg.wait_for_timeout(1300)
+    meta=pg.evaluate(GQL,['Metas',{'prefix':'scrollarr.favorites'}])['data']['metas']['nodes']; check('A favourites synced to Suwayomi meta', len(meta)==1 and 's:2' in meta[0]['value'])
+    pg.evaluate("fetch('/suwayomi/__mock/add-chapter?manga=2',{method:'POST'})"); pg.wait_for_timeout(200)
+    pg.goto(B+'/#/home'); pg.reload(); pg.wait_for_selector('.hero'); pg.wait_for_timeout(11000); pg.reload(); pg.wait_for_selector('.hero'); pg.wait_for_timeout(1500)
+    check('A UP badge after new chapter', pg.locator('.badge.up').count()>=1, pg.locator('.badge.up').count())
+    pg.goto(B+'/#/series/s:2'); pg.wait_for_selector('.eps .ep'); pg.wait_for_timeout(300)
+    pg.click('.sactions .btn >> nth=1'); pg.wait_for_selector('.sheet'); print('  dl menu:', pg.eval_on_selector_all('.sheet .action span:not(.ico)','e=>e.map(x=>x.textContent)'))
+    pg.click('.action >> nth=0'); pg.wait_for_timeout(5000)
+    check('A offline download done', pg.locator('.dl.done').count()==5, pg.locator('.dl.done').count())
+    first=pg.evaluate("document.querySelector('.ep:has(.dl.done) a').getAttribute('href')")
+    ctx.set_offline(True); pg.goto(B+'/'+first); pg.reload(); pg.wait_for_selector('.pg', timeout=8000); pg.wait_for_timeout(2500)
+    check('A offline reading of downloaded chapter', pg.locator('.pg.ok').count()>=3, f"{pg.locator('.pg.ok').count()} pages, {pg.inner_text('.r-count')}")
+    pg.mouse.wheel(0,3000); pg.wait_for_timeout(2300); q=pg.evaluate("localStorage.getItem('scrollarr.progressQueue')"); check('A offline progress queued', 's:2.' in (q or ''), q)
+    ctx.set_offline(False); pg.evaluate("window.dispatchEvent(new Event('online'))"); pg.wait_for_timeout(2500)
+    check('A queue flushed after reconnect', pg.evaluate("localStorage.getItem('scrollarr.progressQueue')")=='{}')
+    pg.goto(B+'/#/more'); pg.wait_for_selector('.panel'); pg.wait_for_timeout(500); shot(pg,'35-suwa-settings.png')
+    print('  server panel:', pg.inner_text('.panel >> nth=0').replace('\n',' | '))
+    check('A no page errors', not errs, errs); ctx.close(); stop(srv)
+
+    # ── B. Les deux serveurs ──
+    errs=[]; srv=server(8392); B='http://localhost:8392'
+    ctx,pg=page(b,errs,'light')
+    pg.goto(B+'/'); pg.wait_for_selector('.server', timeout=8000); pg.wait_for_timeout(400); shot(pg,'40-both-login.png')
+    print('  login cards:', pg.eval_on_selector_all('.server','e=>e.map(x=>x.querySelector("h2").textContent+": "+(x.querySelector(".server-state")?.textContent||"formulaire"))'))
+    pg.click('text=Ne pas utiliser ce serveur'); pg.wait_for_selector('.hero', timeout=8000)
+    check('B skipping Komga enters with Suwayomi only', True)
+    pg.goto(B+'/#/library'); pg.wait_for_selector('.grid .card'); pg.wait_for_timeout(500); check('B Suwayomi-only library = 7', pg.locator('.grid .card').count()==7)
+    pg.goto(B+'/#/more'); pg.wait_for_selector('.server-row'); pg.locator('.server-row input').nth(1).check(); pg.wait_for_selector('.login-form', timeout=8000)
+    pg.fill('input[name=username]','demo@scrollarr.local'); pg.fill('input[name=password]','nope'); pg.click('button[type=submit]'); pg.wait_for_selector('.form-error:not([hidden])')
+    print('  bad password:', pg.inner_text('.form-error:not([hidden])'))
+    pg.fill('input[name=password]','demo'); pg.click('button[type=submit]'); pg.wait_for_selector('.hero', timeout=8000); pg.wait_for_timeout(1200)
+    shot(pg,'41-both-home.png')
+    print('  rows:', pg.eval_on_selector_all('.row-head h2','e=>e.map(x=>x.textContent)'))
+    pg.goto(B+'/#/library'); pg.wait_for_selector('.grid .card'); pg.wait_for_timeout(1500)
+    pg.evaluate('scrollTo(0, document.documentElement.scrollHeight)'); pg.wait_for_timeout(900)
+    n=pg.locator('.grid .card').count(); titles=pg.eval_on_selector_all('.grid .card-title','e=>e.map(x=>x.textContent)')
+    check('B merged library deduped = 19', n==19, n); check('B titles sorted across servers', titles==sorted(titles, key=lambda s: __import__('unicodedata').normalize('NFD',s).encode('ascii','ignore').decode().lower()), titles[:6])
+    check('B duplicate kept once', titles.count('Les Veilleurs de Brume')==1 and titles.count('Café Lune Rouge')==1)
+    href=pg.evaluate("[...document.querySelectorAll('.grid .card')].find(c=>c.textContent.includes('Les Veilleurs')).getAttribute('href')"); check('B duplicate comes from Suwayomi', '/s:' in href, href)
+    print('  chips:', pg.eval_on_selector_all('.chips .chip','e=>e.map(x=>x.textContent)'))
+    shot(pg,'42-both-library.png')
+    pg.click('.chips .chip >> text=BD (Komga)'); pg.wait_for_timeout(700); check('B Komga library filter', pg.locator('.grid .card').count()==2, pg.locator('.grid .card').count())
+    pg.click('.chips .chip >> text=Tout'); pg.wait_for_timeout(500)
+    pg.goto(B+'/#/search'); pg.fill('.searchfield input','lune'); pg.wait_for_selector('.grid .card'); pg.wait_for_timeout(500); check('B search deduped', pg.locator('.grid .card').count()==1, pg.locator('.grid .card').count())
+    # une série Komga se lit toujours
+    pg.goto(B+'/#/library'); pg.wait_for_selector('.grid .card'); pg.wait_for_timeout(800); pg.click('.grid .card >> text=Orbital 9'); pg.wait_for_selector('.eps .ep'); pg.wait_for_timeout(400)
+    print('  komga series facts:', pg.eval_on_selector_all('.facts li','e=>e.map(x=>x.textContent)'), pg.evaluate('location.hash'))
+    shot(pg,'43-both-series-komga.png')
+    pg.click('.cta .btn'); pg.wait_for_selector('.pg.ok', timeout=8000); check('B Komga chapter reads', True, pg.inner_text('.r-count'))
+    pg.goto(B+'/#/more'); pg.wait_for_selector('.server-row'); pg.wait_for_timeout(400); shot(pg,'44-both-settings.png')
+    pg.select_option('.panel .select select','all'); pg.wait_for_timeout(500)
+    pg.goto(B+'/#/library'); pg.wait_for_selector('.grid .card'); pg.wait_for_timeout(1200); pg.evaluate('scrollTo(0, document.documentElement.scrollHeight)'); pg.wait_for_timeout(900)
+    check('B show both = 21', pg.locator('.grid .card').count()==21, pg.locator('.grid .card').count())
+    pg.goto(B+'/#/more'); pg.wait_for_selector('.server-row'); pg.select_option('.panel .select select','komga'); pg.wait_for_timeout(400)
+    pg.goto(B+'/#/library'); pg.wait_for_selector('.grid .card'); pg.wait_for_timeout(1200)
+    href=pg.evaluate("[...document.querySelectorAll('.grid .card')].find(c=>c.textContent.includes('Les Veilleurs')).getAttribute('href')"); check('B priority Komga keeps Komga copy', '/k:' in href, href)
+    check('B no page errors', not errs, errs); ctx.close(); stop(srv)
+
+    # ── C. Modes d'authentification de Suwayomi ──
+    for i,mode in enumerate(['basic','simple','ui']):
+        errs=[]; srv=server(8393+i, SERVERS='suwayomi', SUWA_AUTH=mode, SUWA_TOKEN_TTL='6'); B='http://localhost:%d'%(8393+i)
+        ctx,pg=page(b,errs)
+        pg.goto(B+'/'); pg.wait_for_selector('.login-form', timeout=8000)
+        if mode=='basic': shot(pg,'50-suwa-login.png')
+        pg.fill('input[name=username]','demo'); pg.fill('input[name=password]','wrong'); pg.click('button[type=submit]'); pg.wait_for_selector('.form-error:not([hidden])')
+        pg.fill('input[name=password]','demo'); pg.click('button[type=submit]'); pg.wait_for_selector('.hero', timeout=8000); pg.wait_for_timeout(1000)
+        imgs=pg.evaluate("[...document.querySelectorAll('.card-img img')].slice(0,6).map(i=>i.complete && i.naturalWidth>0)")
+        check(f'C {mode}: login + images load', all(imgs) and len(imgs)>0, imgs)
+        pg.wait_for_timeout(8000)   # laisse expirer le jeton (mode ui)
+        pg.goto(B+'/#/library'); pg.wait_for_selector('.grid .card', timeout=8000); pg.wait_for_timeout(1200)
+        imgs=pg.evaluate("[...document.querySelectorAll('.card-img img')].map(i=>i.complete && i.naturalWidth>0)")
+        check(f'C {mode}: still signed in after 8 s, images load', pg.locator('.grid .card').count()==7 and all(imgs), f"{sum(imgs)}/{len(imgs)}")
+        pg.reload(); pg.wait_for_selector('.grid .card', timeout=8000); check(f'C {mode}: session survives reload', True)
+        pg.goto(B+'/#/more'); pg.wait_for_selector('.server-row'); pg.click('text=Se déconnecter'); pg.wait_for_selector('.login-form', timeout=8000)
+        check(f'C {mode}: sign out returns to login', True)
+        check(f'C {mode}: no page errors', not errs, errs); ctx.close(); stop(srv)
+
+    # ── D. Komga seul (non-régression) ──
+    errs=[]; srv=server(8397, SERVERS='komga'); B='http://localhost:8397'
+    ctx,pg=page(b,errs)
+    pg.goto(B+'/'); pg.wait_for_selector('.login-form', timeout=8000)
+    check('D single server: no skip link', pg.locator('text=Ne pas utiliser ce serveur').count()==0)
+    pg.fill('input[name=username]','demo@scrollarr.local'); pg.fill('input[name=password]','demo'); pg.click('button[type=submit]'); pg.wait_for_selector('.hero', timeout=8000)
+    pg.goto(B+'/#/library'); pg.wait_for_selector('.grid .card'); pg.wait_for_timeout(600); check('D Komga library = 14', pg.locator('.grid .card').count()==14, pg.locator('.grid .card').count())
+    pg.click('.grid .card >> text=Les Veilleurs de Brume'); pg.wait_for_selector('.eps .ep'); pg.click('.cta .btn'); pg.wait_for_selector('.pg.ok'); pg.wait_for_timeout(600)
+    check('D Komga reader resumes page 7', pg.inner_text('.r-count').startswith('7 /'), pg.inner_text('.r-count'))
+    pg.evaluate('scrollTo(0, document.documentElement.scrollHeight)'); pg.wait_for_selector('.nextcard'); pg.wait_for_timeout(2200)
+    bid=pg.evaluate('location.hash').split('/')[-1].split(':')[1]
+    r=pg.evaluate("async id => (await (await fetch('/komga/api/v1/books/'+id)).json()).readProgress", bid); check('D progress saved on Komga', r and r['completed'] is True, r)
+    check('D no page errors', not errs, errs); ctx.close(); stop(srv)
+
+
+run(scenario)
