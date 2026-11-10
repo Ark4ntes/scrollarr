@@ -15,6 +15,12 @@ let loaded;
 let running = false;
 
 export const supported = () => 'caches' in window && 'indexedDB' in window;
+/** Pourquoi la lecture hors ligne est indisponible ici : « http » (adresse non sécurisée) ou « browser ». */
+export const unsupportedReason = () => (supported() ? null : window.isSecureContext ? 'browser' : 'http');
+/** Phrase à afficher quand la lecture hors ligne est indisponible (clé de traduction). */
+export const unsupportedText = () => (unsupportedReason() === 'http'
+  ? 'Lecture hors ligne indisponible à cette adresse : le navigateur ne l’autorise qu’en HTTPS. Ouvrez Scrollarr par une adresse https:// pour enregistrer des chapitres sur cet appareil.'
+  : 'Ce navigateur ne permet pas d’enregistrer des chapitres pour les lire hors ligne.');
 
 export function load() {
   loaded ??= idb.all('downloads').then((rows) => {

@@ -57,6 +57,7 @@ export async function series(root, { id }) {
     api.multi() ? api.serverLabel(id) : null,
   ].filter(Boolean);
   const onServer = !offline && api.canServerDownload(id);
+  const collector = onServer ? api.serverDownloadLabel(id) : '';
 
   const favBtn = h('button.btn', { type: 'button', onclick: () => {
     const on = store.toggleFavorite(s);
@@ -90,7 +91,7 @@ export async function series(root, { id }) {
           authors.length ? h('p.shero-authors', authors.join(', ')) : null,
           h('ul.facts', facts.map((f) => h('li', f)))))),
     h('div.sactions', favBtn,
-      downloads.supported() && !offline
+      (downloads.supported() || onServer) && !offline
         ? h('button.btn', { type: 'button', onclick: downloadMenu }, icon('download', 18), t('Télécharger')) : null),
     (s.metadata?.genres || []).length ? h('div.chips.wrap.static', s.metadata.genres.map((g) => h('span.chip', g))) : null,
     summary);
@@ -179,7 +180,7 @@ export async function series(root, { id }) {
         : downloads.supported() && !offline
           ? { icon: 'download', label: t('Télécharger ce chapitre'), run: () => queue([b]) } : null,
       onServer && !b.onServer
-        ? { icon: 'library', label: t('Télécharger sur le serveur'), run: () => keepOnServer([b]) } : null,
+        ? { icon: 'library', label: t('Faire télécharger par {server}', { server: collector }), run: () => keepOnServer([b]) } : null,
     ]);
   }
 
@@ -194,7 +195,8 @@ export async function series(root, { id }) {
     const todo = list.filter((b) => !b.onServer);
     if (!todo.length) return toast(t('Ces chapitres sont déjà sur le serveur.'));
     api.serverDownload(todo.map((b) => b.id)).then(
-      () => toast(todo.length === 1 ? t('Téléchargement demandé au serveur') : t('{n} téléchargements demandés au serveur', { n: todo.length })),
+      () => toast(todo.length === 1 ? t('Demandé à {server}. Le chapitre restera sur le serveur, pas sur cet appareil.', { server: collector })
+        : t('{n} chapitres demandés à {server}. Ils resteront sur le serveur, pas sur cet appareil.', { n: todo.length, server: collector }), { duration: 5000 }),
       () => toast(t('L’action a échoué.')));
   }
 
@@ -202,13 +204,17 @@ export async function series(root, { id }) {
     const unread = books.filter((b) => !b.readProgress?.completed);
     const from = next ? books.indexOf(next.book) : 0;
     const have = downloads.all().filter((r) => r.seriesId === id).length;
-    actionSheet(t('Télécharger pour lire hors ligne'), [
-      { icon: 'download', label: t('Les 5 prochains chapitres'), run: () => queue(books.slice(from, from + 5)) },
-      unread.length && unread.length !== books.length
+    const local = downloads.supported();
+    const missing = onServer ? books.filter((b) => !b.onServer).length : 0;
+    actionSheet(t('Télécharger'), [
+      { note: local ? t('Sur cet appareil, pour lire sans connexion :') : t(downloads.unsupportedText()) },
+      local ? { icon: 'download', label: t('Les 5 prochains chapitres'), run: () => queue(books.slice(from, from + 5)) } : null,
+      local && unread.length && unread.length !== books.length
         ? { icon: 'download', label: t('Tous les chapitres non lus'), hint: String(unread.length), run: () => queue(unread) } : null,
-      { icon: 'download', label: t('Toute la série'), hint: String(books.length), run: () => queue(books) },
-      onServer && books.some((b) => !b.onServer)
-        ? { icon: 'library', label: t('Garder toute la série sur le serveur'), hint: String(books.filter((b) => !b.onServer).length), run: () => keepOnServer(books) } : null,
+      local ? { icon: 'download', label: t('Toute la série'), hint: String(books.length), run: () => queue(books) } : null,
+      missing ? { note: t('Sur le serveur : {server} récupère les chapitres chez la source. Ils se lisent plus vite, mais seulement quand le serveur est joignable.', { server: collector }) } : null,
+      missing
+        ? { icon: 'library', label: t('Faire télécharger toute la série par {server}', { server: collector }), hint: String(missing), run: () => keepOnServer(books) } : null,
       have ? { icon: 'trash', label: t('Supprimer les téléchargements de cette série'), hint: String(have), danger: true, run: () => downloads.removeSeries(id) } : null,
     ]);
   }

@@ -199,6 +199,7 @@ h2.sub { padding: 18px var(--pad) 8px; }
 .empty .btn { margin-top: 8px; }
 .empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .note { color: var(--tone); font-size: 14px; }
+.sheet-note { padding: 8px 10px; line-height: 1.4; }
 .spinner { width: 28px; height: 28px; margin: 48px auto; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 

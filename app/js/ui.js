@@ -90,6 +90,8 @@ export function sheet(title, build) {
 export function actionSheet(title, actions) {
   return sheet(title, (body, close) => {
     for (const a of actions.filter(Boolean)) {
+      // Une entrée { note } est une explication, pas une action.
+      if (a.note) { body.append(h('p.note.sheet-note', a.note)); continue; }
       body.append(h('button.action' + (a.danger ? '.danger' : ''), {
         type: 'button', onclick: () => { close(); a.run(); },
       }, a.icon ? icon(a.icon) : null, h('span', a.label), a.hint ? h('small', a.hint) : null));

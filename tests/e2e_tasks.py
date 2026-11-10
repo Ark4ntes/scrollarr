@@ -27,7 +27,7 @@ def scenario(b):
     check('empty state before any request', 'Aucune tâche' in pg.inner_text('.tasks'), pg.inner_text('.tasks'))
 
     pg.goto(B + '/#/series/s:5'); pg.wait_for_selector('.eps .ep')
-    pg.click('.btn >> text=Télécharger'); pg.click('.action >> text=Garder toute la série sur le serveur'); pg.wait_for_selector('.toast')
+    pg.click('.btn >> text=Télécharger'); pg.click('.action >> text=Faire télécharger toute la série par Suwayomi'); pg.wait_for_selector('.toast')
     pg.goto(B + '/#/more'); pg.wait_for_selector('.task >> nth=3')
     r = rows(pg)
     check('four tasks, one running and three queued', [x['state'] for x in r] == ['running', 'queued', 'queued', 'queued'], r)
@@ -60,8 +60,27 @@ def scenario(b):
     check('history survives a reload', sorted(x['state'] for x in rows(pg)) == ['cancelled', 'done', 'done', 'failed'], rows(pg))
     pg.goto(B + '/#/series/s:5'); pg.wait_for_selector('.eps .ep'); pg.wait_for_timeout(400)
     pg.click('.btn >> text=Télécharger')
-    hint = pg.locator('.action', has_text='Garder toute la série sur le serveur').inner_text()
+    hint = pg.locator('.action', has_text='Faire télécharger toute la série par Suwayomi').inner_text()
     check('series page: two chapters still missing on the server', '2' in hint, hint)
+
+    # Plain HTTP on a LAN address: the browser refuses offline storage, and the app must say so
+    import subprocess
+    ip = subprocess.run(['hostname', '-I'], capture_output=True, text=True).stdout.split()[0]
+    lan = f'http://{ip}:8433'
+    pl = b.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, locale='fr-FR').new_page()
+    pl.goto(lan + '/#/series/s:5'); pl.wait_for_selector('.eps .ep')
+    check('http: not a secure context', pl.evaluate('window.isSecureContext') is False)
+    pl.click('.btn >> text=Télécharger'); pl.wait_for_selector('.sheet')
+    sheet = pl.inner_text('.sheet')
+    check('http: download menu explains why offline is unavailable', 'HTTPS' in sheet and 'Les 5 prochains chapitres' not in sheet, sheet)
+    check('http: server download still offered, named after the collector', 'Faire télécharger toute la série par Suwayomi' in sheet and 'seulement quand le serveur est joignable' in sheet, sheet)
+    pl.wait_for_timeout(500); shot(pl, 'download-menu-http.png')
+    pl.goto(lan + '/#/home'); pl.goto(lan + '/#/my/downloads'); pl.wait_for_selector('.empty')
+    check('http: downloads list explains it too', 'HTTPS' in pl.inner_text('.empty'), pl.inner_text('.empty'))
+    pg.goto(B + '/#/home'); pg.reload(); pg.goto(B + '/#/series/s:5'); pg.wait_for_selector('.eps .ep'); pg.click('.sactions .btn >> text=Télécharger'); pg.wait_for_selector('.sheet')
+    sheet = pg.inner_text('.sheet')
+    check('https or localhost: both kinds of download, each labelled', 'Sur cet appareil' in sheet and 'Les 5 prochains chapitres' in sheet and 'Sur le serveur' in sheet, sheet)
+    pg.wait_for_timeout(500); shot(pg, 'download-menu.png')
     stop(srv)
 
     # Komga only: no collector, no panel
