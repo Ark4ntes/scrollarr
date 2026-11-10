@@ -372,9 +372,18 @@ async function proxy(req, res, target) {
 
 const suwayomi = createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody, cookie });
 
+let outage = 'off';
 http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
+    // Simule un serveur injoignable alors que l'appareil a du réseau : les requêtes vers
+    // les serveurs restent sans réponse (hang), ou sont refusées par un proxy (deny).
+    //   POST /__mock/outage?mode=hang|deny|off
+    if (url.pathname === '/__mock/outage') { outage = url.searchParams.get('mode') || 'off'; return send(res, 200, { outage }); }
+    if (outage !== 'off' && (url.pathname.startsWith('/komga/') || url.pathname.startsWith('/suwayomi/'))) {
+      if (outage === 'hang') return; // jamais de réponse
+      res.writeHead(403, { 'Content-Type': 'text/html' }); return res.end('<html><body>Forbidden</body></html>');
+    }
     if (url.pathname === '/servers.json') {
       return send(res, 200, { komga: ENABLED.includes('komga'), suwayomi: ENABLED.includes('suwayomi') }, { 'Cache-Control': 'no-store' });
     }

@@ -114,7 +114,7 @@ export function createSuwayomi({ base }) {
     // ── Session ──
     async session() {
       try {
-        await gql('Probe', undefined, { quiet: true });
+        await gql('Probe', undefined, { quiet: true, probe: true });
         await idb.set('kv', 'me:' + ID, true);
         return { name: localStorage.getItem(USER_KEY) || null };
       } catch (e) {

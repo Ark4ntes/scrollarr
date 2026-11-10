@@ -39,7 +39,7 @@ export function createKomga({ base }) {
     // ── Session ──
     async session() {
       try {
-        const u = await request('/api/v2/users/me', { quiet: true });
+        const u = await request('/api/v2/users/me', { quiet: true, probe: true });
         await idb.set('kv', 'me:' + ID, u);
         return { name: u.email };
       } catch (e) {
