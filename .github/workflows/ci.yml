@@ -22,6 +22,8 @@ jobs:
         run: node tests/unit_sync.mjs
       - name: Connector contracts (unit)
         run: node tests/unit_contracts.mjs
+      - name: Task model (unit)
+        run: node tests/unit_tasks.mjs
 
   e2e:
     name: e2e
@@ -54,6 +56,9 @@ jobs:
       - name: E2E multi-device sync (ties, clocks, slow writes, subscriptions)
         if: ${{ !cancelled() }}
         run: python tests/e2e_sync.py
+      - name: E2E collector tasks
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_tasks.py
       - name: Upload screenshots
         if: failure()
         uses: actions/upload-artifact@v4

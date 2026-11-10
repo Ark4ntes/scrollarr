@@ -8,6 +8,7 @@ import { READERS, COLLECTORS } from './connectors/index.js';
 import { CAP } from './connectors/contract.js';
 import { validateReader } from './connectors/reader-contract.js';
 import { validateCollector } from './connectors/collector-contract.js';
+import * as tasksModel from './tasks.js';
 import { events, isReachable, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
 import { idb } from './idb.js';
 
@@ -371,11 +372,11 @@ export const markSeriesUnread = changing('markSeriesUnread');
 
 // ───────────── Téléchargement côté serveur (si le serveur sait le faire) ─────────────
 
+// Un collecteur qui emprunte la session d'un lecteur n'est utilisable que si ce lecteur l'est.
+const collectorUsable = (k) => typeof k.session !== 'string' || servers.some((s) => s.c.id === k.session && usable(s));
 /** Collecteur capable de récupérer des chapitres désignés par les identifiants de ce lecteur. */
 function collectorFor(reader) {
-  return collectors.find((k) => k.capabilities.includes(CAP.COLLECT_CHAPTERS) && k.serves.includes(reader.id)
-    // Un collecteur qui emprunte la session d'un lecteur n'est utilisable que si ce lecteur l'est.
-    && (typeof k.session !== 'string' || servers.some((s) => s.c.id === k.session && usable(s))));
+  return collectors.find((k) => k.capabilities.includes(CAP.COLLECT_CHAPTERS) && k.serves.includes(reader.id) && collectorUsable(k));
 }
 export const canServerDownload = (id) => !!collectorFor(find(id));
 export async function serverDownload(bookIds) {
@@ -384,6 +385,62 @@ export async function serverDownload(bookIds) {
   const collector = collectorFor(c);
   if (!collector) throw new Error('Aucun collecteur pour ce serveur');
   await collector.collectChapters(c.id, bookIds.map((id) => rawId(c, id)));
+  refreshTasks().catch(() => {});
+}
+
+// ───────────── Tâches de collecte (modèle commun : tasks.js) ─────────────
+
+const TASKS_KEY = 'scrollarr.tasks';
+let taskList = readJson(TASKS_KEY, []);
+export const taskEvents = new EventTarget();
+function setTasks(list) {
+  taskList = list;
+  try { localStorage.setItem(TASKS_KEY, JSON.stringify(list)); } catch { /* stockage plein : le suivi reste en mémoire */ }
+  taskEvents.dispatchEvent(new Event('change'));
+}
+const trackers = () => collectors.filter((k) => k.capabilities.includes(CAP.COLLECT_TASKS) && collectorUsable(k));
+const collectorLabel = (id) => collectors.find((k) => k.id === id)?.label || id;
+
+/** Un collecteur parle avec les identifiants de son lecteur : on leur ajoute le préfixe de la façade. */
+function toTask(k, raw) {
+  const reader = servers.find((s) => s.c.id === raw.reader)?.c;
+  return tasksModel.normalize(k.id, {
+    ...raw,
+    reader: reader ? raw.reader : null,
+    seriesId: reader && raw.seriesId ? `${reader.code}:${raw.seriesId}` : null,
+    chapterId: reader && raw.chapterId ? `${reader.code}:${raw.chapterId}` : null,
+  });
+}
+
+/** Vrai si au moins un collecteur utilisable sait déclarer ses tâches. */
+export const canTrackTasks = () => trackers().length > 0;
+/** Tâches connues de cet appareil : en cours d'abord, puis les dernières terminées. */
+export const tasks = () => taskList.map((task) => ({ ...task, collectorLabel: collectorLabel(task.collector) }));
+
+/** Interroge les collecteurs et met la liste à jour. Un collecteur qui ne répond pas garde ses tâches en l'état. */
+export async function refreshTasks() {
+  let list = taskList;
+  for (const k of trackers()) {
+    try {
+      const reports = (await k.tasks()).map((raw) => toTask(k, raw));
+      list = tasksModel.reconcile(list, reports);
+      const gone = tasksModel.missing(list, k.id, reports);
+      if (gone.length) list = tasksModel.reconcile(list, (await k.resolveTasks(gone.map((task) => task.nativeId))).map((raw) => toTask(k, raw)));
+    } catch (e) {
+      if (!(e instanceof OfflineError) && !(e instanceof AuthError) && !(e instanceof ApiError)) throw e;
+    }
+  }
+  if (JSON.stringify(list) !== JSON.stringify(taskList)) { setTasks(list); merged.clear(); }
+  return tasks();
+}
+
+/** Annule une tâche, si son collecteur le permet. */
+export async function cancelTask(id) {
+  const task = taskList.find((x) => x.id === id);
+  const k = task && collectors.find((x) => x.id === task.collector);
+  if (!k || !task.cancellable || !k.capabilities.includes(CAP.COLLECT_CANCEL)) throw new Error('Annulation impossible');
+  await k.cancelTask(task.nativeId);
+  setTasks(tasksModel.cancelled(taskList, id));
 }
 
 // ───────────── Réglages conservés sur les serveurs ─────────────

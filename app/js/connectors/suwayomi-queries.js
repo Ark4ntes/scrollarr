@@ -60,6 +60,13 @@ export const Q = {
   ProgressMany: `mutation ProgressMany($ids: [Int!]!, $isRead: Boolean, $lastPageRead: Int) {
     updateChapters(input: { ids: $ids, patch: { isRead: $isRead, lastPageRead: $lastPageRead } }) { chapters { id } }
   }`,
+  Downloads: `query Downloads { downloadStatus { state queue {
+    state progress tries position
+    chapter { id name mangaId }
+    manga { id title }
+  } } }`,
+  ChaptersState: 'query ChaptersState($ids: [Int!]!) { chapters(filter: { id: { in: $ids } }) { nodes { id name mangaId isDownloaded manga { id title } } } }',
+  Dequeue: 'mutation Dequeue($ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $ids }) { clientMutationId } }',
   Enqueue: 'mutation Enqueue($ids: [Int!]!) { enqueueChapterDownloads(input: { ids: $ids }) { clientMutationId } }',
   DeleteMeta: 'mutation DeleteMeta($key: String!) { deleteGlobalMeta(input: { key: $key }) { clientMutationId } }',
   SetMeta: 'mutation SetMeta($key: String!, $value: String!) { setGlobalMeta(input: { meta: { key: $key, value: $value } }) { meta { key } } }',
@@ -68,4 +75,4 @@ export const Q = {
 };
 
 /** Requêtes en lecture seule, sans risque pour un serveur réel (utilisé par le script de vérification). */
-export const READ_ONLY = ['About', 'Probe', 'Categories', 'Library', 'Latest', 'InProgress', 'RecentlyRead', 'Metas'];
+export const READ_ONLY = ['About', 'Probe', 'Categories', 'Library', 'Latest', 'InProgress', 'RecentlyRead', 'Metas', 'Downloads'];

@@ -18,14 +18,27 @@
 //   collect.chapters → collectChapters(readerId, chapterIds)
 //                      demande la récupération de chapitres désignés par les identifiants
 //                      du lecteur `readerId` (qui figure dans `serves`).
+//   collect.tasks    → tasks()
+//                      renvoie les tâches que le collecteur connaît en ce moment. Chacune
+//                      est un objet { nativeId, state, progress, attempts, error, cancellable,
+//                      reader, seriesId, chapterId, seriesTitle, chapterTitle, startedAt,
+//                      finishedAt } ; voir tasks.js pour le sens de chaque champ. Les
+//                      identifiants de série et de chapitre sont ceux du lecteur `reader`.
+//                    → resolveTasks(nativeIds)
+//                      dit ce que sont devenues des tâches que tasks() ne renvoie plus
+//                      (terminées, annulées ailleurs…), sous la même forme. Un collecteur
+//                      qui garde son historique peut renvoyer une liste vide.
+//   collect.cancel   → cancelTask(nativeId)
 import { CAP, check } from './contract.js';
 
 const ALWAYS = ['id', 'label', 'capabilities', 'serves'];
 const OWN_SERVER = ['session', 'login', 'logout'];
 const WHEN = {
   [CAP.COLLECT_CHAPTERS]: ['collectChapters'],
+  [CAP.COLLECT_TASKS]: ['tasks', 'resolveTasks'],
+  [CAP.COLLECT_CANCEL]: ['cancelTask'],
 };
-const ALLOWED = [CAP.COLLECT_CHAPTERS];
+const ALLOWED = [CAP.COLLECT_CHAPTERS, CAP.COLLECT_TASKS, CAP.COLLECT_CANCEL];
 
 /** Vérifie qu'un collecteur respecte le contrat et le renvoie. `readerIds` : lecteurs connus. */
 export function validateCollector(collector, readerIds = []) {
@@ -34,6 +47,9 @@ export function validateCollector(collector, readerIds = []) {
   if (!Array.isArray(collector.serves)) throw new Error(`${name} : « serves » doit être une liste`);
   const unknown = [...collector.serves, ...(typeof collector.session === 'string' ? [collector.session] : [])].filter((id) => !readerIds.includes(id));
   if (unknown.length) throw new Error(`${name} : lecteur inconnu « ${unknown.join(', ')} »`);
+  if (collector.capabilities.includes(CAP.COLLECT_CANCEL) && !collector.capabilities.includes(CAP.COLLECT_TASKS)) {
+    throw new Error(`${name} : « collect.cancel » demande « collect.tasks »`);
+  }
   if (collector.capabilities.includes(CAP.COLLECT_CHAPTERS) && !collector.serves.length) {
     throw new Error(`${name} : « collect.chapters » demande au moins un lecteur dans « serves »`);
   }

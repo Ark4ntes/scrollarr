@@ -34,6 +34,25 @@ export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody
   const mangas = [];
   const chapters = [];
   const metas = new Map();
+  // File de téléchargement. Sans DOWNLOAD_MS, un chapitre demandé est disponible aussitôt.
+  // Avec DOWNLOAD_MS=<durée par chapitre>, la file avance dans le temps, un chapitre à la fois ;
+  // DOWNLOAD_FAIL=<id de chapitre> fait échouer ce chapitre.
+  const DOWNLOAD_MS = Number(process.env.DOWNLOAD_MS || 0);
+  const DOWNLOAD_FAIL = Number(process.env.DOWNLOAD_FAIL || 0);
+  let queue = []; // { chapterId, state, progress, tries, startedAt }
+  function tickQueue() {
+    const now = Date.now();
+    for (const item of queue) {
+      if (item.state === 'ERROR') continue;
+      if (item.state === 'QUEUED') { item.state = 'DOWNLOADING'; item.startedAt = now; }
+      item.progress = Math.min(1, (now - item.startedAt) / DOWNLOAD_MS);
+      if (item.chapterId === DOWNLOAD_FAIL && item.progress >= 0.5) { item.state = 'ERROR'; item.tries = 3; item.progress = 0; continue; }
+      if (item.progress < 1) break; // un seul téléchargement à la fois
+      const c = chapters.find((x) => x.id === item.chapterId);
+      c.isDownloaded = true; c.pageCount = c._pages; item.state = 'FINISHED';
+    }
+    queue = queue.filter((item) => item.state !== 'FINISHED');
+  }
   let chapterId = 0;
 
   function addChapter(m, n, fetchedAt, downloaded) {
@@ -146,8 +165,23 @@ export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody
     Progress: ({ id, isRead, lastPageRead }) => { patch([id], isRead, lastPageRead); return { updateChapter: { chapter: { id } } }; },
     ProgressMany: ({ ids, isRead, lastPageRead }) => { patch(ids, isRead, lastPageRead); return { updateChapters: { chapters: ids.map((id) => ({ id })) } }; },
     Enqueue: ({ ids }) => {
-      for (const c of chapters.filter((x) => ids.includes(x.id))) { c.isDownloaded = true; c.pageCount = c._pages; }
+      for (const c of chapters.filter((x) => ids.includes(x.id))) {
+        if (!DOWNLOAD_MS) { c.isDownloaded = true; c.pageCount = c._pages; }
+        else if (!c.isDownloaded && !queue.some((q) => q.chapterId === c.id)) queue.push({ chapterId: c.id, state: 'QUEUED', progress: 0, tries: 0, startedAt: 0 });
+      }
       return { enqueueChapterDownloads: { clientMutationId: null } };
+    },
+    Dequeue: ({ ids }) => { queue = queue.filter((q) => !ids.includes(q.chapterId)); return { dequeueChapterDownloads: { clientMutationId: null } }; },
+    Downloads: () => {
+      tickQueue();
+      return { downloadStatus: { state: 'STARTED', queue: queue.map((q, position) => {
+        const c = chapters.find((x) => x.id === q.chapterId);
+        return { state: q.state, progress: q.progress, tries: q.tries, position, chapter: { id: c.id, name: c.name, mangaId: c.mangaId }, manga: { id: c.mangaId, title: mangas.find((m) => m.id === c.mangaId).title } };
+      }) } };
+    },
+    ChaptersState: ({ ids }) => {
+      tickQueue();
+      return { chapters: { nodes: chapters.filter((c) => ids.includes(c.id)).map((c) => ({ id: c.id, name: c.name, mangaId: c.mangaId, isDownloaded: c.isDownloaded, manga: { id: c.mangaId, title: mangas.find((m) => m.id === c.mangaId).title } })) } };
     },
     SetMeta: ({ key, value }) => { if (value.length > 4096) fail('Value too long for column "VALUE CHARACTER VARYING(4096)"'); metas.set(key, value); return { setGlobalMeta: { meta: { key } } }; },
     Login: ({ username, password }) => {

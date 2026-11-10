@@ -25,6 +25,10 @@ export const CAP = Object.freeze({
   // ── Collecteurs ──
   /** Récupérer des chapitres déjà connus d'un lecteur (méthode `collectChapters`). */
   COLLECT_CHAPTERS: 'collect.chapters',
+  /** Déclarer ses tâches en cours, au format de tasks.js (méthodes `tasks` et `resolveTasks`). */
+  COLLECT_TASKS: 'collect.tasks',
+  /** Annuler une tâche (méthode `cancelTask`). */
+  COLLECT_CANCEL: 'collect.cancel',
 });
 
 /**
