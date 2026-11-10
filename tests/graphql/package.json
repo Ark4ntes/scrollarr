@@ -1,0 +1,7 @@
+{
+  "name": "scrollarr-tests-graphql",
+  "private": true,
+  "type": "module",
+  "description": "Isolated dependency for the GraphQL syntax check (keeps the repo root free of a package.json)",
+  "dependencies": { "graphql": "16.9.0" }
+}
