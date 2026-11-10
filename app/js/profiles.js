@@ -8,6 +8,7 @@
 //    de petits documents rangés sur le serveur (voir loadDocs/saveDoc dans
 //    api.js), ce qui les rend disponibles sur tous les appareils.
 import * as api from './api.js';
+import { mergeSeries, mergeIdx, compareStamp, deviceId } from './sync.js';
 
 const LIST_KEY = 'scrollarr.profiles';
 const ACTIVE_KEY = 'scrollarr.profile';
@@ -71,15 +72,18 @@ export function choose(id) {
 // Par serveur : un index (compteurs par série + derniers chapitres ouverts) et
 // un document par série (page atteinte dans chaque chapitre).
 //   idx      { s: { cléSérie: [lus, enCours, date] }, r: [ { b, s, st, nm, n, p, tot, c, t } ] }
-//   s.<clé>  { idChapitre: [page, terminé (0/1), date, effacé (1) ?] }
+//   s.<clé>  { idChapitre: [page, terminé (0/1), date, effacé (0/1), révision, appareil] }
 //
-// Deux appareils peuvent lire sous le même profil. Chaque entrée porte donc sa
-// date, et tout échange avec le serveur est une fusion entrée par entrée (la
-// plus récente gagne) plutôt qu'un remplacement du document. Une entrée
-// effacée laisse une marque datée, sinon l'autre appareil la ferait revenir.
+// Deux appareils peuvent lire sous le même profil. Chaque entrée porte donc
+// une révision et l'appareil qui l'a écrite (voir sync.js), et tout échange
+// avec le serveur est une fusion entrée par entrée plutôt qu'un remplacement
+// du document. Une entrée effacée laisse une marque, sinon l'autre appareil
+// la ferait revenir.
 
 let docs = {};            // { idServeur: { idx, series: { cléSérie: {…} } } }
-const dirty = new Set();  // « idServeur|idx » ou « idServeur|s.<clé> » à renvoyer au serveur
+// « idServeur|idx » ou « idServeur|s.<clé> » à renvoyer au serveur → numéro de la dernière modification.
+// Ce numéro permet de savoir, à la fin d'une écriture, si le document a encore changé entre-temps.
+const dirty = new Map();
 const byBook = new Map(); // idChapitre préfixé → [page, terminé, date, effacé ?]
 let timer = 0;
 
@@ -91,23 +95,8 @@ const server = (id) => (docs[api.serverOf(id)] ||= emptyServer());
 const live = (v) => !!v && !v[3];
 const now = () => Math.floor(Date.now() / 1000);
 
-/** Fusion de deux documents de série : pour chaque chapitre, l'entrée la plus récente. */
-export function mergeSeries(a = {}, b = {}) {
-  const out = { ...a };
-  for (const [k, v] of Object.entries(b)) if (!out[k] || v[2] > out[k][2]) out[k] = v;
-  return out;
-}
-/** Fusion de deux index : compteurs les plus récents par série, historique réuni et borné. */
-export function mergeIdx(a = {}, b = {}) {
-  const s = { ...(a.s || {}) };
-  for (const [k, v] of Object.entries(b.s || {})) if (!s[k] || v[2] > s[k][2]) s[k] = v;
-  const byId = new Map();
-  for (const e of [...(a.r || []), ...(b.r || [])]) if (!byId.has(e.b) || e.t > byId.get(e.b).t) byId.set(e.b, e);
-  return { s, r: [...byId.values()].sort((x, y) => y.t - x.t).slice(0, RECENT_MAX) };
-}
-
 function mirror() {
-  try { localStorage.setItem(mirrorKey(), JSON.stringify({ docs, dirty: [...dirty] })); } catch { /* stockage plein : la copie locale est facultative */ }
+  try { localStorage.setItem(mirrorKey(), JSON.stringify({ docs, dirty: [...dirty.keys()] })); } catch { /* stockage plein : la copie locale est facultative */ }
 }
 function index() {
   byBook.clear();
@@ -126,11 +115,10 @@ function recount(d, key) {
 }
 /** Retire de l'historique les chapitres effacés depuis. */
 function prune(d) {
-  d.idx.r = d.idx.r.filter((e) => { const v = byBook.get(e.b); return !v || live(v) || v[2] < e.t; });
+  d.idx.r = d.idx.r.filter((e) => { const v = byBook.get(e.b); return !v || live(v) || compareStamp(v[4], v[5], e.v, e.d) < 0; });
 }
 function touch(sid, key) {
-  dirty.add(`${sid}|idx`);
-  dirty.add(`${sid}|s.${key}`);
+  for (const item of [`${sid}|idx`, `${sid}|s.${key}`]) dirty.set(item, (dirty.get(item) || 0) + 1);
 }
 function schedule(immediately) {
   mirror();
@@ -144,7 +132,7 @@ function absorb(sid, name, text) {
   let value;
   try { value = JSON.parse(text); } catch { return; }
   const d = (docs[sid] ||= emptyServer());
-  if (name === 'idx') d.idx = mergeIdx(d.idx, value);
+  if (name === 'idx') d.idx = mergeIdx(d.idx, value, RECENT_MAX);
   else if (name.startsWith('s.')) {
     const key = name.slice(2);
     d.series[key] = mergeSeries(d.series[key], value);
@@ -176,14 +164,20 @@ const overlay = {
     const d = server(book.id);
     const key = seriesKey(book.seriesId);
     const t = now();
-    const v = [page, completed ? 1 : 0, t];
-    (d.series[key] ||= {})[raw(book.id)] = v;
+    const prev = (d.series[key] ||= {})[raw(book.id)];
+    // La révision n'avance que lorsque l'entrée change de main ou d'état :
+    // tourner les pages d'un chapitre déjà à soi ne la fait pas grimper, sinon
+    // l'appareil qui écrit le plus souvent l'emporterait toujours sur un autre.
+    const mine = prev && prev[5] === deviceId() && !prev[3] && !!prev[1] === !!completed;
+    const rev = (prev?.[4] || 0) + (mine ? 0 : 1);
+    const v = [page, completed ? 1 : 0, mine ? Math.max(t, prev[2]) : t, 0, rev, deviceId()];
+    d.series[key][raw(book.id)] = v;
     byBook.set(book.id, v);
     recount(d, key);
     if (!quiet) {
       d.idx.r = [{
         b: book.id, s: book.seriesId, st: book.seriesTitle, nm: book.metadata?.title || book.name,
-        n: book.metadata?.numberSort ?? book.number, p: page, tot: book.media?.pagesCount || 0, c: v[1], t,
+        n: book.metadata?.numberSort ?? book.number, p: page, tot: book.media?.pagesCount || 0, c: v[1], t, v: rev, d: v[5],
       }, ...d.idx.r.filter((e) => e.b !== book.id)].slice(0, RECENT_MAX);
     }
     touch(sid, key);
@@ -194,8 +188,9 @@ const overlay = {
     for (const book of books) {
       const d = server(book.id);
       const key = seriesKey(book.seriesId);
-      const v = [0, 0, now(), 1];
-      (d.series[key] ||= {})[raw(book.id)] = v;
+      const rev = ((d.series[key] ||= {})[raw(book.id)]?.[4] || 0) + 1;
+      const v = [0, 0, now(), 1, rev, deviceId()];
+      d.series[key][raw(book.id)] = v;
       byBook.set(book.id, v);
       prune(d);
       recount(d, key);
@@ -209,9 +204,10 @@ const overlay = {
 let flushing = null;
 async function flush() {
   clearTimeout(timer);
+  let done = false;
   flushing ??= (async () => {
     // Les documents de série d'abord : l'index est recalculé à partir d'eux.
-    const items = [...dirty].sort((a, b) => a.endsWith('|idx') - b.endsWith('|idx'));
+    const items = [...dirty.keys()].sort((a, b) => a.endsWith('|idx') - b.endsWith('|idx'));
     for (const item of items) {
       const [sid, name] = item.split('|');
       const key = prefix() + name;
@@ -220,12 +216,26 @@ async function flush() {
       const remote = (await api.loadDocs(key))[sid]?.[key];
       if (remote !== undefined) absorb(sid, name, remote);
       const d = docs[sid] || emptyServer();
-      if (name === 'idx') prune(d);
+      if (name === 'idx') {
+        // Les compteurs se déduisent des documents de série, qui font foi.
+        for (const k of Object.keys(d.series)) recount(d, k);
+        prune(d);
+      }
+      // Numéro relevé au moment exact où le contenu est figé pour l'envoi.
+      const sent = dirty.get(item);
       await api.saveDoc(sid, key, JSON.stringify(name === 'idx' ? d.idx : d.series[name.slice(2)] || {}));
-      dirty.delete(item);
+      // Si le document a encore changé pendant l'écriture, il reste à renvoyer.
+      if (dirty.get(item) === sent) dirty.delete(item);
     }
     mirror();
-  })().finally(() => { flushing = null; });
+    done = true;
+  })().finally(() => {
+    flushing = null;
+    mirror(); // même après un échec : ce qui n'est pas parti doit survivre à un rechargement
+    // Ce qui a été modifié pendant ce passage part au suivant. Après un échec
+    // (hors ligne), on attend le retour du réseau plutôt que de boucler.
+    if (done && dirty.size) { clearTimeout(timer); timer = setTimeout(() => flush().catch(() => {}), 1500); }
+  });
   return flushing;
 }
 
@@ -245,7 +255,7 @@ export async function load() {
 
   const local = readJson(mirrorKey(), { docs: {}, dirty: [] });
   docs = local.docs || {};
-  (local.dirty || []).forEach((x) => dirty.add(x));
+  (local.dirty || []).forEach((x) => dirty.set(x, 1));
   index();
   try {
     const remote = await api.loadDocs(prefix());

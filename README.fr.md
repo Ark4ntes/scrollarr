@@ -210,7 +210,8 @@ Il reste à l'inscrire dans `app/js/connectors/index.js`, à ajouter son proxy e
 - L'envoi réel des notifications (au-delà de l'abonnement et de la détection des nouveaux chapitres) n'a pas été exécuté.
 - Un chapitre Suwayomi non téléchargé est récupéré chez la source à l'ouverture : le premier affichage peut prendre plusieurs secondes, et dépend du bon fonctionnement de l'extension.
 - Les doublons entre serveurs sont reconnus par leur titre uniquement.
-- Deux appareils qui lisent en même temps sous le même profil secondaire sont fusionnés chapitre par chapitre (l'entrée la plus récente l'emporte) ; les abonnements restent remplacés en bloc.
+- Les appareils qui partagent un profil secondaire sont fusionnés entrée par entrée (progression des chapitres, historique, abonnements). Chaque entrée porte un numéro de révision et l'identifiant de l'appareil qui l'a écrite : le résultat ne dépend pas de l'heure des appareils. Quand deux appareils modifient la même entrée sans s'être vus, l'une des deux est conservée — la même sur tous les appareils — mais rien ne permet de savoir laquelle était réellement la dernière.
+- Les abonnements du profil principal sont fusionnés de la même façon ; sa progression de lecture est celle du serveur et suit les règles du serveur.
 - Sur iOS, l'espace alloué aux téléchargements est décidé par le système et peut être repris si l'application n'est pas installée sur l'écran d'accueil.
 - Pas de lecture page par page (droite à gauche) : Scrollarr est volontairement un lecteur vertical.
 

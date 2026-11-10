@@ -214,7 +214,8 @@ Then register it in `app/js/connectors/index.js`, add its proxy and its `servers
 - Actually delivering notifications (beyond subscribing and detecting new chapters) has not been exercised.
 - A Suwayomi chapter that is not downloaded is fetched from the source when opened: the first display can take several seconds and depends on the extension working.
 - Duplicates across servers are matched by title only.
-- Two devices reading at the same time under the same secondary profile are merged chapter by chapter (the most recent entry wins); subscriptions are still replaced as a whole list.
+- Devices sharing a secondary profile are merged entry by entry (chapter progress, history, subscriptions). Each entry carries a revision number and the identifier of the device that wrote it, so the result does not depend on device clocks. When two devices change the same entry without having seen each other, one of the two is kept — the same one on every device — but nothing can tell which was really the latest.
+- Subscriptions of the main profile are merged the same way; its reading progress is the server's own and follows the server's rules.
 - On iOS, storage for downloads is decided by the system and may be reclaimed if the app is not installed on the home screen.
 - No paged (right-to-left) reading: Scrollarr is deliberately a vertical reader.
 
