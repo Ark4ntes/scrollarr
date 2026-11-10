@@ -1,6 +1,7 @@
 // État local : réglages de l'appareil et abonnements (synchronisés via les serveurs).
 import * as api from './api.js';
 import * as profiles from './profiles.js';
+import { mergeFavs, deviceId } from './sync.js';
 import { pool, debounce } from './ui.js';
 
 export const events = new EventTarget();
@@ -39,11 +40,13 @@ export function applyTheme() {
 }
 
 // ───────────── Abonnements ─────────────
-// Komga n'a pas de notion de favori par utilisateur : la liste est conservée
-// sur l'appareil et recopiée dans les « client settings » du compte Komga pour
-// suivre l'utilisateur d'un appareil à l'autre.
+// La liste est conservée sur l'appareil et recopiée sur les serveurs pour
+// suivre l'utilisateur d'un appareil à l'autre. Chaque abonnement porte une
+// révision (voir sync.js) : deux appareils fusionnent leurs listes entrée par
+// entrée, et un désabonnement laisse une marque au lieu de disparaître.
 
-let favs; // { updatedAt, items: { [seriesId]: { id, title, seen, added } } }
+let favs; // { updatedAt, items: { [seriesId]: { id, title, seen, added, rev, dev, del? } } }
+let favGen = 0; // augmente à chaque modification locale
 
 function loadFavs() {
   if (!favs) {
@@ -52,38 +55,52 @@ function loadFavs() {
   }
   return favs;
 }
-const pushRemote = debounce(() => {
-  api.setClientSetting(profiles.favKey(), JSON.stringify(loadFavs())).catch(() => { /* réessayé au prochain changement */ });
-}, 800);
-function saveFavs({ remote = true } = {}) {
+const persist = () => localStorage.setItem(profiles.favKey(), JSON.stringify(favs));
+const stamp = (prev) => ({ rev: (prev?.rev || 0) + 1, dev: deviceId() });
+
+/** Lit la liste du serveur, la fusionne avec celle de l'appareil, puis renvoie le résultat. */
+async function exchange({ write }) {
+  const key = profiles.favKey();
+  let text;
+  try { text = await api.getClientSetting(key); }
+  catch { return; } // serveur injoignable : on réessaiera, sans rien écraser
+  let remote = null;
+  try { remote = JSON.parse(text); } catch { /* rien d'enregistré sur le serveur */ }
+  const gen = favGen;
+  const before = JSON.stringify(loadFavs().items);
+  favs = mergeFavs(loadFavs(), remote);
+  persist();
+  if (JSON.stringify(favs.items) !== before) emit('favorites');
+  if (write || JSON.stringify(favs.items) !== JSON.stringify(remote?.items || {})) {
+    try { await api.setClientSetting(key, JSON.stringify(favs)); } catch { return; }
+  }
+  // Une modification faite pendant l'échange part à son tour.
+  if (favGen !== gen) pushRemote();
+}
+const pushRemote = debounce(() => exchange({ write: true }), 800);
+
+function saveFavs() {
+  favGen++;
   favs.updatedAt = Date.now();
-  localStorage.setItem(profiles.favKey(), JSON.stringify(favs));
-  if (remote) pushRemote();
+  persist();
+  pushRemote();
   emit('favorites');
 }
 
-/** Récupère la liste du serveur ; la version la plus récente l'emporte. */
-export async function syncFavorites() {
-  const local = loadFavs();
-  let remote;
-  try { remote = JSON.parse(await api.getClientSetting(profiles.favKey())); } catch { return; }
-  if (remote && typeof remote.items === 'object' && (remote.updatedAt || 0) > (local.updatedAt || 0)) {
-    favs = remote;
-    localStorage.setItem(profiles.favKey(), JSON.stringify(favs));
-    emit('favorites');
-  } else if ((local.updatedAt || 0) > (remote?.updatedAt || 0)) {
-    pushRemote();
-  }
-}
+/** À l'ouverture : récupère ce que les autres appareils ont changé. */
+export const syncFavorites = () => exchange({ write: false });
 
-export const favorites = () => Object.values(loadFavs().items).sort((a, b) => b.added - a.added);
-export const favoriteIds = () => Object.keys(loadFavs().items);
-export const isFavorite = (id) => id in loadFavs().items;
+const isOn = (item) => !!item && !item.del;
+export const favorites = () => Object.values(loadFavs().items).filter(isOn).sort((a, b) => b.added - a.added);
+export const favoriteIds = () => favorites().map((f) => f.id);
+export const isFavorite = (id) => isOn(loadFavs().items[id]);
 
 export function toggleFavorite(series) {
   const f = loadFavs();
-  if (f.items[series.id]) delete f.items[series.id];
-  else f.items[series.id] = { id: series.id, title: series.metadata?.title || series.name, seen: series.booksCount, added: Date.now() };
+  const prev = f.items[series.id];
+  f.items[series.id] = isOn(prev)
+    ? { id: series.id, title: prev.title, del: 1, ...stamp(prev) }
+    : { id: series.id, title: series.metadata?.title || series.name, seen: series.booksCount, added: Date.now(), ...stamp(prev) };
   saveFavs();
   return isFavorite(series.id);
 }
@@ -91,11 +108,10 @@ export function toggleFavorite(series) {
 /** À appeler quand l'utilisateur ouvre la fiche : remet le compteur de nouveautés à zéro. */
 export function markSeen(series) {
   const item = loadFavs().items[series.id];
-  if (!item) return;
+  if (!isOn(item)) return;
   const title = series.metadata?.title || series.name;
   if (item.seen === series.booksCount && item.title === title) return;
-  item.seen = series.booksCount;
-  item.title = title;
+  favs.items[series.id] = { ...item, seen: series.booksCount, title, ...stamp(item) };
   delete newCounts[series.id];
   saveFavs();
 }
@@ -120,7 +136,7 @@ export async function refreshFavorites() {
   const out = [];
   items.forEach((item, i) => {
     const s = fresh[i];
-    if (s === 'gone') { delete f.items[item.id]; changed = true; return; }
+    if (s === 'gone') { f.items[item.id] = { id: item.id, title: item.title, del: 1, ...stamp(item) }; changed = true; return; }
     if (s) newCounts[item.id] = Math.max(0, s.booksCount - (item.seen ?? s.booksCount));
     out.push({ item, series: s });
   });
