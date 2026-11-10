@@ -379,6 +379,8 @@ function collectorFor(reader) {
   return collectors.find((k) => k.capabilities.includes(CAP.COLLECT_CHAPTERS) && k.serves.includes(reader.id) && collectorUsable(k));
 }
 export const canServerDownload = (id) => !!collectorFor(find(id));
+/** Nom du collecteur qui téléchargerait les chapitres de cette série, pour le dire clairement à l'écran. */
+export const serverDownloadLabel = (id) => collectorFor(find(id))?.label || '';
 export async function serverDownload(bookIds) {
   if (!bookIds.length) return;
   const [c] = route(bookIds[0]);

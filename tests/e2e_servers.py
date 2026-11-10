@@ -42,9 +42,9 @@ def scenario(b):
     check('A back to series, CTA moved on', 'chapitre 11' in pg.inner_text('.cta .btn'), pg.inner_text('.cta .btn'))
     # chapitre non téléchargé sur le serveur (lecture en direct) + demande de téléchargement serveur
     last=pg.locator('.eps .ep').last; last.scroll_into_view_if_needed(); last.locator('.ep-more').click(); pg.wait_for_selector('.sheet')
-    acts=pg.eval_on_selector_all('.sheet .action span:not(.ico)','e=>e.map(x=>x.textContent)'); check('A chapter menu offers server download', 'Télécharger sur le serveur' in acts, acts)
+    acts=pg.eval_on_selector_all('.sheet .action span:not(.ico)','e=>e.map(x=>x.textContent)'); check('A chapter menu offers server download', 'Faire télécharger par Suwayomi' in acts, acts)
     shot(pg,'34-suwa-chapter-menu.png')
-    pg.click('.action >> text=Télécharger sur le serveur'); pg.wait_for_timeout(600)
+    pg.click('.action >> text=Faire télécharger par Suwayomi'); pg.wait_for_timeout(600)
     c22=[c for c in pg.evaluate(GQL,['Chapters',{'mangaId':3}])['data']['chapters']['nodes'] if c['sourceOrder']==22][0]
     check('A server download enqueued', c22['isDownloaded'] is True)
     pg.goto(B+'/#/read/s:3.%d' % [c for c in pg.evaluate(GQL,['Chapters',{'mangaId':3}])['data']['chapters']['nodes'] if c['sourceOrder']==20][0]['id']); pg.wait_for_selector('.pg.ok', timeout=8000)

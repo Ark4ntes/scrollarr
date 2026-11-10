@@ -69,7 +69,9 @@ async function downloaded(body) {
     const recs = downloads.all();
     if (!recs.length) {
       fill(body, emptyState(t('Aucun chapitre hors ligne'),
-        t('Téléchargez des chapitres depuis la fiche d’une série pour les lire sans connexion.')));
+        downloads.supported()
+          ? t('Depuis la fiche d’une série, touchez Télécharger pour enregistrer des chapitres sur cet appareil. Les chapitres téléchargés par le serveur n’apparaissent pas ici.')
+          : t(downloads.unsupportedText())));
       return;
     }
     const groups = new Map();
