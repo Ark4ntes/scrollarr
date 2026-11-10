@@ -40,5 +40,13 @@ test('a collector with its own server must handle its own session', () => {
   assert.ok(validateCollector(collector({ session: fn, login: fn, logout: fn }), ['demo']));
 });
 
+test('collect.tasks needs tasks() and resolveTasks(); collect.cancel needs cancelTask() and collect.tasks', () => {
+  const caps = [CAP.COLLECT_CHAPTERS, CAP.COLLECT_TASKS];
+  assert.throws(() => validateCollector(collector({ capabilities: caps, tasks: fn }), ['demo']), /resolveTasks/);
+  assert.ok(validateCollector(collector({ capabilities: caps, tasks: fn, resolveTasks: fn }), ['demo']));
+  assert.throws(() => validateCollector(collector({ capabilities: [...caps, CAP.COLLECT_CANCEL], tasks: fn, resolveTasks: fn }), ['demo']), /cancelTask/);
+  assert.throws(() => validateCollector(collector({ capabilities: [CAP.COLLECT_CHAPTERS, CAP.COLLECT_CANCEL], cancelTask: fn }), ['demo']), /collect\.tasks/);
+});
+
 console.log(failed ? `\n${failed} test(s) failed` : '\nAll contract unit tests passed');
 process.exit(failed ? 1 : 0);
