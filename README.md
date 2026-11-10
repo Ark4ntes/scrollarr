@@ -81,19 +81,33 @@ The app is plain JavaScript in ES modules with no build step: what is in `app/` 
 
 Requirements: Docker, at least one running server (Suwayomi or Komga), and an **HTTPS** address for Scrollarr. Over plain HTTP the app still reads, but browsers disable installation to the home screen, offline downloads and notifications.
 
-1. Copy the repository to your machine, for example `/volume1/docker/scrollarr`.
-2. Create the settings file:
+Scrollarr is published as a ready-to-run image, so you do not need to clone the repository. Images (`ghcr.io/ark4ntes/scrollarr` and `ghcr.io/ark4ntes/scrollarr-notifier`, for `amd64` and `arm64`) are published when a version tag is pushed. Until the first release, build from a clone instead (see the alternative below).
+
+1. Create a folder on your machine, for example `/volume1/docker/scrollarr`, and download the two files you need into it:
    ```sh
-   cp .env.example .env
+   curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/docker-compose.yml
+   curl -o .env https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/.env.example
    ```
-   Set `SUWAYOMI_URL` and/or `KOMGA_URL` to the address of each server as seen from the container (for example `http://192.168.1.10:4567`). Leave empty the one you do not use.
-3. Start it:
+   Edit `.env`: set `SUWAYOMI_URL` and/or `KOMGA_URL` to the address of each server as seen from the container (for example `http://192.168.1.10:4567`). Leave empty the one you do not use.
+2. Start it:
    ```sh
    docker compose up -d
    ```
    The app answers on port `8380` (change it with `SCROLLARR_PORT`). After editing `.env`, recreate the container with `docker compose up -d --force-recreate`.
-4. Publish it over HTTPS with your reverse proxy. On a Synology NAS: *Control Panel > Login Portal > Advanced > Reverse Proxy*, source `https://scrollarr.example.com:443`, destination `http://localhost:8380`, then assign the certificate under *Security > Certificate*.
-5. Open the address. If a server requires authentication, Scrollarr shows its sign-in form; otherwise you land directly on the home screen.
+3. Publish it over HTTPS with your reverse proxy. On a Synology NAS: *Control Panel > Login Portal > Advanced > Reverse Proxy*, source `https://scrollarr.example.com:443`, destination `http://localhost:8380`, then assign the certificate under *Security > Certificate*.
+4. Open the address. If a server requires authentication, Scrollarr shows its sign-in form; otherwise you land directly on the home screen.
+
+**Alternative: from a clone.** Copy the repository, then `cp .env.example .env`, fill it in as above and run `docker compose up -d --build`: the images are built locally instead of being pulled.
+
+**Without Compose.** The image alone is enough; both variables are optional and empty by default (an empty address means the server is not configured):
+
+```sh
+docker run -d --name scrollarr --restart unless-stopped -p 8380:80 \
+  -e SUWAYOMI_URL=http://192.168.1.10:4567 -e KOMGA_URL= \
+  ghcr.io/ark4ntes/scrollarr:latest
+```
+
+**Healthchecks.** Both images declare one: Scrollarr fetches `/servers.json` every 30 seconds, the notifier calls its `/health` endpoint. `docker ps` (or the Container Manager on Synology) shows `healthy` or `unhealthy` next to each container.
 
 If a server card says it is not responding, the container cannot reach the address in `.env`: `localhost` points to the container itself, and a container name only resolves if both stacks share a Docker network (see the comment at the bottom of `docker-compose.yml`).
 
@@ -127,8 +141,9 @@ Keep *Analyze page dimensions* enabled on your libraries (it is by default). Scr
 1. In `.env`: set `VAPID_SUBJECT` to a contact address. For Komga, create an API key (*My account > API keys*) and put it in `KOMGA_API_KEY`. For a protected Suwayomi, set `SUWAYOMI_USER` and `SUWAYOMI_PASSWORD`.
 2. Start with the `push` profile:
    ```sh
-   docker compose --profile push up -d --build
+   docker compose --profile push up -d
    ```
+   (from a clone, before the first release is published, add `--build`).
 3. In Scrollarr: *Settings > Notifications*, turn the option on, then *Send a test*.
 
 The notifier polls each server every `POLL_MINUTES` minutes and sends one notification per followed series, even when several chapters arrive together. Its keys and the list of subscribed devices are kept in `data/notifier/`.
@@ -160,6 +175,12 @@ Useful entry points:
 - `app/js/views/reader.js`: the reader.
 - `app/js/i18n.js`: translations (French strings are the keys; add a dictionary for a new language).
 - `app/css/app.css`: colours and type are variables at the top of the file.
+
+To run the real container against your working copy (`app/` and the nginx template mounted read-only, so edits show up without rebuilding):
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
 
 Code comments are currently in French.
 

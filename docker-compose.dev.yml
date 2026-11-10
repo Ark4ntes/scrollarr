@@ -1,0 +1,8 @@
+# Surcharge pour développer l'application : app/ et le modèle nginx sont
+# montés en lecture seule, les modifications sont visibles sans reconstruire.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+services:
+  scrollarr:
+    volumes:
+      - ./app:/usr/share/nginx/html:ro
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro

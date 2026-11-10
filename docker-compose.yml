@@ -1,9 +1,12 @@
 # Scrollarr — lecteur vertical pour Suwayomi et Komga.
 #   docker compose up -d                  application seule
 #   docker compose --profile push up -d   application + notifications push
+# Depuis un clone : « docker compose up -d --build » construit les images localement.
+# Pour développer l'application : « docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d »
 services:
   scrollarr:
-    image: nginx:1.27-alpine
+    image: ghcr.io/ark4ntes/scrollarr:latest
+    build: .
     container_name: scrollarr
     restart: unless-stopped
     environment:
@@ -12,14 +15,12 @@ services:
       # variables doivent exister, même vides.
       SUWAYOMI_URL: ${SUWAYOMI_URL:-}
       KOMGA_URL: ${KOMGA_URL:-}
-    volumes:
-      - ./app:/usr/share/nginx/html:ro
-      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
     ports:
       - "${SCROLLARR_PORT:-8380}:80"
 
   notifier:
     profiles: ["push"]
+    image: ghcr.io/ark4ntes/scrollarr-notifier:latest
     build: ./notifier
     container_name: scrollarr-notifier
     restart: unless-stopped
