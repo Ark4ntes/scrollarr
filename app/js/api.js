@@ -4,8 +4,10 @@
 //
 // Chaque identifiant porte le code de son serveur en préfixe (« s:12 »,
 // « k:0ABC… ») ; les connecteurs, eux, ne voient que leurs identifiants bruts.
-import { CONNECTORS } from './connectors/index.js';
-import { CAP, validate } from './connectors/contract.js';
+import { READERS, COLLECTORS } from './connectors/index.js';
+import { CAP } from './connectors/contract.js';
+import { validateReader } from './connectors/reader-contract.js';
+import { validateCollector } from './connectors/collector-contract.js';
 import { events, isReachable, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
 import { idb } from './idb.js';
 
@@ -20,7 +22,9 @@ const DEDUPE_KEY = 'scrollarr.dedupe';
 const readJson = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
 
 /** { c: connecteur, available, enabled, state: 'off' | 'ok' | 'offline' | 'auth' | 'down', user } */
-const servers = CONNECTORS.map((def) => ({ c: validate(def.create({ base: base + def.path })), available: false, enabled: false, state: 'off', user: null }));
+const servers = READERS.map((def) => ({ c: validateReader(def.create({ base: base + def.path })), available: false, enabled: false, state: 'off', user: null }));
+// Les collecteurs sont à part : ils ne fournissent rien à lire, seulement de quoi alimenter un lecteur.
+const collectors = COLLECTORS.map((def) => validateCollector(def.create({ base: base + def.path }), READERS.map((r) => r.id)));
 const usable = (s) => s.state === 'ok' || s.state === 'offline';
 
 // ───────────── Choix et état des serveurs ─────────────
@@ -367,11 +371,19 @@ export const markSeriesUnread = changing('markSeriesUnread');
 
 // ───────────── Téléchargement côté serveur (si le serveur sait le faire) ─────────────
 
-export const canServerDownload = (id) => can(id, CAP.CHAPTER_DOWNLOAD);
+/** Collecteur capable de récupérer des chapitres désignés par les identifiants de ce lecteur. */
+function collectorFor(reader) {
+  return collectors.find((k) => k.capabilities.includes(CAP.COLLECT_CHAPTERS) && k.serves.includes(reader.id)
+    // Un collecteur qui emprunte la session d'un lecteur n'est utilisable que si ce lecteur l'est.
+    && (typeof k.session !== 'string' || servers.some((s) => s.c.id === k.session && usable(s))));
+}
+export const canServerDownload = (id) => !!collectorFor(find(id));
 export async function serverDownload(bookIds) {
   if (!bookIds.length) return;
   const [c] = route(bookIds[0]);
-  await c.serverDownload(bookIds.map((id) => rawId(c, id)));
+  const collector = collectorFor(c);
+  if (!collector) throw new Error('Aucun collecteur pour ce serveur');
+  await collector.collectChapters(c.id, bookIds.map((id) => rawId(c, id)));
 }
 
 // ───────────── Réglages conservés sur les serveurs ─────────────

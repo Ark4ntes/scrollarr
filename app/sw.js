@@ -3,7 +3,7 @@
 //  - pages téléchargées : servies depuis le cache « téléchargements » ;
 //  - vignettes : cache d'abord, rafraîchies en arrière-plan ;
 //  - notifications push.
-const SHELL = 'scrollarr-shell-v6';
+const SHELL = 'scrollarr-shell-v7';
 const THUMBS = 'scrollarr-thumbs-v1';
 const DL = 'scrollarr-dl-v1'; // doit correspondre à DL_CACHE dans js/config.js
 const THUMBS_MAX = 700;
@@ -18,7 +18,9 @@ const SHELL_FILES = [
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
   'js/app.js', 'js/api.js', 'js/components.js', 'js/config.js', 'js/downloads.js', 'js/i18n.js', 'js/idb.js',
   'js/net.js', 'js/profiles.js', 'js/push.js', 'js/router.js', 'js/store.js', 'js/sync.js', 'js/ui.js',
-  'js/connectors/contract.js', 'js/connectors/index.js', 'js/connectors/komga.js', 'js/connectors/suwayomi.js', 'js/connectors/suwayomi-queries.js',
+  'js/connectors/contract.js', 'js/connectors/reader-contract.js', 'js/connectors/collector-contract.js', 'js/connectors/index.js',
+  'js/connectors/suwayomi-client.js', 'js/connectors/suwayomi-queries.js',
+  'js/connectors/readers/komga.js', 'js/connectors/readers/suwayomi.js', 'js/connectors/collectors/suwayomi.js',
   'js/views/home.js', 'js/views/library.js', 'js/views/login.js', 'js/views/more.js', 'js/views/my.js', 'js/views/profiles.js',
   'js/views/reader.js', 'js/views/search.js', 'js/views/series.js',
 ];
