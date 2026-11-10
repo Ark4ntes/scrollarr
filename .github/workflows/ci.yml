@@ -44,6 +44,9 @@ jobs:
       - name: E2E profiles
         if: ${{ !cancelled() }}
         run: python tests/e2e_profiles.py
+      - name: E2E two devices on one profile
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_merge.py
       - name: Upload screenshots
         if: failure()
         uses: actions/upload-artifact@v4

@@ -170,6 +170,7 @@ A connector is a `create({ base })` function returning an object. `base` is the 
 | Member | Role |
 | --- | --- |
 | `id`, `code`, `label`, `userLabel` | Identifier, one-letter prefix, display name, label of the username field |
+| `capabilities` | What the server can do, from the list in `app/js/connectors/contract.js`; the interface only offers what is declared |
 | `session()`, `login(user, password)`, `logout()` | Session; `session()` throws `AuthError` when sign-in is required |
 | `libraries()`, `genres()` | Library filters |
 | `seriesList({ libraryId, genre, readStatus, search, sort, page, size })` | Returns `{ content, last }` |
@@ -179,7 +180,9 @@ A connector is a `create({ base })` function returning an object. `base` is the 
 | `seriesThumb(id)`, `bookThumb(id)` | Cover URLs |
 | `saveProgress(id, page, completed)`, `markBookRead/Unread(id)`, `markSeriesRead/Unread(id)` | Progress |
 | `getSettings(prefix)`, `setSetting(key, value)`, `deleteSettings(keys)` | Small key-value store on the server (subscriptions, profiles) |
-| `serverDownload(ids)` | Optional |
+| `serverDownload(ids)` | Only with the `chapter.download` capability |
+
+The contract is checked at startup by `validate()` in `app/js/connectors/contract.js`: an incomplete connector fails loudly instead of misbehaving later.
 
 Then register it in `app/js/connectors/index.js`, add its proxy and its `servers.json` entry in `nginx/default.conf.template`, and the URL patterns of its pages and covers in `app/sw.js` (offline reading).
 
@@ -190,7 +193,7 @@ Then register it in `app/js/connectors/index.js`, add its proxy and its `servers
 - Actually delivering notifications (beyond subscribing and detecting new chapters) has not been exercised.
 - A Suwayomi chapter that is not downloaded is fetched from the source when opened: the first display can take several seconds and depends on the extension working.
 - Duplicates across servers are matched by title only.
-- Two devices reading at the same time under the same secondary profile can overwrite each other: last write wins.
+- Two devices reading at the same time under the same secondary profile are merged chapter by chapter (the most recent entry wins); subscriptions are still replaced as a whole list.
 - On iOS, storage for downloads is decided by the system and may be reclaimed if the app is not installed on the home screen.
 - No paged (right-to-left) reading: Scrollarr is deliberately a vertical reader.
 

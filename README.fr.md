@@ -166,6 +166,7 @@ Un connecteur est une fonction `create({ base })` qui renvoie un objet. `base` e
 | Membre | Rôle |
 | --- | --- |
 | `id`, `code`, `label`, `userLabel` | Identifiant, préfixe d'une lettre, nom affiché, libellé du champ identifiant |
+| `capabilities` | Ce que le serveur sait faire, parmi la liste de `app/js/connectors/contract.js` ; l'interface ne propose que ce qui est déclaré |
 | `session()`, `login(user, password)`, `logout()` | Session ; `session()` lève `AuthError` si une connexion est requise |
 | `libraries()`, `genres()` | Filtres de la bibliothèque |
 | `seriesList({ libraryId, genre, readStatus, search, sort, page, size })` | Renvoie `{ content, last }` |
@@ -175,7 +176,9 @@ Un connecteur est une fonction `create({ base })` qui renvoie un objet. `base` e
 | `seriesThumb(id)`, `bookThumb(id)` | Adresses des couvertures |
 | `saveProgress(id, page, completed)`, `markBookRead/Unread(id)`, `markSeriesRead/Unread(id)` | Progression |
 | `getSettings(prefix)`, `setSetting(key, value)`, `deleteSettings(keys)` | Petit stockage clé-valeur côté serveur (abonnements, profils) |
-| `serverDownload(ids)` | Facultatif |
+| `serverDownload(ids)` | Seulement avec la capacité `chapter.download` |
+
+Le contrat est vérifié au démarrage par `validate()` dans `app/js/connectors/contract.js` : un connecteur incomplet échoue tout de suite au lieu de mal se comporter plus tard.
 
 Il reste à l'inscrire dans `app/js/connectors/index.js`, à ajouter son proxy et sa ligne `servers.json` dans `nginx/default.conf.template`, et les adresses de ses pages et couvertures dans `app/sw.js` (lecture hors ligne).
 
@@ -186,7 +189,7 @@ Il reste à l'inscrire dans `app/js/connectors/index.js`, à ajouter son proxy e
 - L'envoi réel des notifications (au-delà de l'abonnement et de la détection des nouveaux chapitres) n'a pas été exécuté.
 - Un chapitre Suwayomi non téléchargé est récupéré chez la source à l'ouverture : le premier affichage peut prendre plusieurs secondes, et dépend du bon fonctionnement de l'extension.
 - Les doublons entre serveurs sont reconnus par leur titre uniquement.
-- Deux appareils qui lisent en même temps sous le même profil secondaire peuvent s'écraser : la dernière écriture l'emporte.
+- Deux appareils qui lisent en même temps sous le même profil secondaire sont fusionnés chapitre par chapitre (l'entrée la plus récente l'emporte) ; les abonnements restent remplacés en bloc.
 - Sur iOS, l'espace alloué aux téléchargements est décidé par le système et peut être repris si l'application n'est pas installée sur l'écran d'accueil.
 - Pas de lecture page par page (droite à gauche) : Scrollarr est volontairement un lecteur vertical.
 
