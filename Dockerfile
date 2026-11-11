@@ -10,8 +10,8 @@ COPY app/ /usr/share/nginx/html/
 # Le modèle est rendu au démarrage par le mécanisme « templates » de l'image officielle.
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 
-# Les deux variables doivent exister, même vides (vide = serveur non configuré).
-ENV KOMGA_URL="" SUWAYOMI_URL=""
+# Les trois variables doivent exister, même vides (vide = serveur non configuré).
+ENV KOMGA_URL="" SUWAYOMI_URL="" FOLDERS_URL=""
 
 EXPOSE 80
 

@@ -55,6 +55,9 @@ jobs:
         run: |
           pip install -r tests/requirements.txt
           python -m playwright install --with-deps chromium
+      - name: Folders dependencies (locked; the folders e2e suites start the real service)
+        run: npm ci --omit=dev --no-audit --no-fund
+        working-directory: folders
       - name: E2E servers
         run: python tests/e2e_servers.py
       - name: E2E profiles
@@ -75,6 +78,9 @@ jobs:
       - name: E2E unreachable server
         if: ${{ !cancelled() }}
         run: python tests/e2e_offline.py
+      - name: E2E folders reader (real service, none and password modes, offline, next to Suwayomi)
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_folders.py
       - name: Upload screenshots
         if: failure()
         uses: actions/upload-artifact@v4
@@ -119,6 +125,9 @@ jobs:
         if: ${{ !cancelled() }}
       - name: Folders invalidation (integration)
         run: node tests/integration_folders_invalidation.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders reader in the app (unit)
+        run: node tests/unit_folders_reader.mjs
         if: ${{ !cancelled() }}
       - name: Folders container (read-only mounts, health)
         run: tests/container_folders.sh

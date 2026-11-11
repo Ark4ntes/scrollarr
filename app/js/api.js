@@ -95,6 +95,8 @@ export async function test(serverId) {
   return { state: s.state, ms: Math.round(performance.now() - start) };
 }
 export const multi = () => active().length > 1;
+/** Vrai si chaque serveur utilisé sait dire où en est la lecture d'une série (filtre « Lecture » de la bibliothèque). */
+export const canFilterByStatus = () => active().every((c) => c.capabilities.includes(CAP.PROGRESS_READ));
 /** Change dès que l'ensemble des serveurs utilisés (ou la règle des doublons) change. */
 export const signature = () => active().map((c) => c.id).join('+') + (dedupe() ? '' : '+all');
 /** Vrai si l'identifiant appartient à un serveur actuellement utilisable. */

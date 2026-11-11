@@ -10,11 +10,13 @@
 // son proxy ; un collecteur qui partage le serveur d'un lecteur reprend le sien.
 import { createKomga } from './readers/komga.js';
 import { createSuwayomi } from './readers/suwayomi.js';
+import { createFolders } from './readers/folders.js';
 import { createSuwayomiCollector } from './collectors/suwayomi.js';
 
 export const READERS = [
   { id: 'suwayomi', path: 'suwayomi', create: createSuwayomi },
   { id: 'komga', path: 'komga', create: createKomga },
+  { id: 'folders', path: 'folders', create: createFolders }, // en dernier : priorité la plus basse pour les doublons
 ];
 
 export const COLLECTORS = [

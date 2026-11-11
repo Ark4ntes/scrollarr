@@ -1,7 +1,7 @@
 // Génère une bibliothèque d'essai pour le service folders (READ-002 §4.11) :
 // petites images PNG et archives ZIP produites ici, aucun fichier binaire dans le dépôt.
 //
-//   node dev/make-folders-fixture.mjs <dossier> [--bulk N]
+//   node dev/make-folders-fixture.mjs <dossier> [--bulk N] [--page LARGEURxHAUTEUR]
 //
 // Résultat : <dossier>/libraries/{Scans,Autre}/… et <dossier>/outside/ (cible des
 // liens symboliques sortants). Lancer ensuite :
@@ -11,17 +11,23 @@ import { join, resolve } from 'node:path';
 import { deflateSync, deflateRawSync, crc32 } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
-/** PNG 1×1 d'une couleur donnée. */
-export function png(r = 200, g = 80, b = 80) {
+/** PNG d'une couleur donnée : 1×1 par défaut ; plus grand, un dégradé vertical (pour des captures d'écran lisibles). */
+export function png(r = 200, g = 80, b = 80, width = 1, height = 1) {
   const chunk = (type, data) => {
     const body = Buffer.concat([Buffer.from(type), data]);
     const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
     const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
     return Buffer.concat([len, body, crc]);
   };
-  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(1, 0); ihdr.writeUInt32BE(1, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const raw = Buffer.alloc(height * (1 + 3 * width)); // filtre 0 puis les pixels de chaque ligne
+  for (let y = 0; y < height; y++) {
+    const row = y * (1 + 3 * width);
+    const k = height === 1 ? 1 : 0.35 + 0.65 * (y / (height - 1));
+    for (let x = 0; x < width; x++) raw.set([Math.round(r * k), Math.round(g * k), Math.round(b * k)], row + 1 + 3 * x);
+  }
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(Buffer.from([0, r, g, b]))), chunk('IEND', Buffer.alloc(0))]);
+    chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
 /**
@@ -80,16 +86,17 @@ export function zip(files, options) {
   return Buffer.concat(segments.map((s) => s.data)); // sans « gap », les segments se suivent
 }
 
-export function makeFixture(out, { bulk = 0 } = {}) {
+/** `page` : [largeur, hauteur] des images (1×1 par défaut ; les tests de navigateur en demandent de plus grandes). */
+export function makeFixture(out, { bulk = 0, page = [1, 1] } = {}) {
   const root = resolve(out);
   const lib = join(root, 'libraries');
   const put = (rel, data) => { const f = join(lib, rel); mkdirSync(join(f, '..'), { recursive: true }); writeFileSync(f, data); };
-  const pages = (rel, n) => { for (let i = 1; i <= n; i++) put(`${rel}/${String(i).padStart(3, '0')}.png`, png(40 * i % 255, 90, 160)); };
-  const cbz = (rel, n = 3) => put(rel, zip(Object.fromEntries(Array.from({ length: n }, (_, i) => [`${String(i + 1).padStart(3, '0')}.png`, png(40 * i, 120, 60)]))));
+  const pages = (rel, n) => { for (let i = 1; i <= n; i++) put(`${rel}/${String(i).padStart(3, '0')}.png`, png(40 * i % 255, 90, 160, ...page)); };
+  const cbz = (rel, n = 3) => put(rel, zip(Object.fromEntries(Array.from({ length: n }, (_, i) => [`${String(i + 1).padStart(3, '0')}.png`, png(40 * i, 120, 60, ...page)]))));
 
   // Série d'archives, avec une couverture.
   for (const n of [1, 2, 10]) cbz(`Scans/Alpha Quest/Chapitre ${String(n).padStart(3, '0')}.cbz`);
-  put('Scans/Alpha Quest/cover.png', png(10, 10, 200));
+  put('Scans/Alpha Quest/cover.png', png(10, 10, 200, ...page));
   // Série de dossiers d'images : « Chapitre 10 » doit venir après « Chapitre 2 ».
   for (const n of [1, 2, 10]) pages(`Scans/Beta Folders/Chapitre ${n}`, 2 + (n % 3));
   // Niveaux intermédiaires (tomes), étiquette entre crochets, numéros décimaux.
@@ -129,7 +136,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const bulkAt = args.indexOf('--bulk');
   const bulk = bulkAt >= 0 ? Number(args.splice(bulkAt, 2)[1]) : 0;
-  if (!args[0]) { console.error('Usage : node dev/make-folders-fixture.mjs <dossier> [--bulk N]'); process.exit(1); }
-  const f = makeFixture(args[0], { bulk });
+  const pageAt = args.indexOf('--page');
+  const page = pageAt >= 0 ? args.splice(pageAt, 2)[1].split('x').map(Number) : [1, 1];
+  if (!args[0]) { console.error('Usage : node dev/make-folders-fixture.mjs <dossier> [--bulk N] [--page LARGEURxHAUTEUR]'); process.exit(1); }
+  const f = makeFixture(args[0], { bulk, page });
   console.log(`Bibliothèque d'essai créée : ${f.libraries}`);
 }

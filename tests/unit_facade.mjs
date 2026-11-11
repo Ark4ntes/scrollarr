@@ -88,5 +88,9 @@ await test('reading still works: book, pages and thumbnails are served without p
   api.bookPages('n:7'); api.bookThumb('n:7');
 });
 
+await test('the reading-status filter is offered only when every used server can filter (none of the test readers can)', () => {
+  assert.equal(api.canFilterByStatus(), false);
+});
+
 console.log(failed ? `\n${failed} test(s) failed` : '\nAll facade unit tests passed');
 process.exit(failed ? 1 : 0);

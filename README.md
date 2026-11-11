@@ -4,7 +4,7 @@
 
 A continuous vertical reader for your self-hosted manga library: scroll through a chapter in one gesture, roll into the next one, and pick up exactly where you stopped. Installable web app (PWA), no third-party account, no telemetry. MIT licensed.
 
-Scrollarr connects to [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server), to [Komga](https://komga.org), or to both at once. Other servers can be added as connectors.
+Scrollarr connects to [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server), to [Komga](https://komga.org), or to both at once. With its optional folders service it can also read plain folders of scans (image folders, CBZ/ZIP) with neither of them. Other servers can be added as connectors.
 
 Independent project, not affiliated with Suwayomi, Komga or any commercial reading service.
 
@@ -75,7 +75,7 @@ The app is plain JavaScript in ES modules with no build step: what is in `app/` 
 | `app/js/connectors/` | Connectors, split by role: `readers/` (what you read) and `collectors/` (what fetches chapters) |
 | `nginx/` | Web server and proxy configuration |
 | `notifier/` | Small Node service that sends push notifications |
-| `folders/` | Small Node service that browses scan folders (optional, not yet connected to the app) |
+| `folders/` | Small Node service that reads scan folders for the "Folders" reader (optional) |
 | `dev/` | Mock servers for development, compatibility checker |
 
 ## Installation
@@ -89,7 +89,7 @@ Scrollarr is published as a ready-to-run image, so you do not need to clone the 
    curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/docker-compose.yml
    curl -o .env https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/.env.example
    ```
-   Edit `.env`: set `SUWAYOMI_URL` and/or `KOMGA_URL` to the address of each server as seen from the container (for example `http://192.168.1.10:4567`). Leave empty the one you do not use.
+   Edit `.env`: set `SUWAYOMI_URL` and/or `KOMGA_URL` to the address of each server as seen from the container (for example `http://192.168.1.10:4567`). Leave empty the one you do not use. To read plain folders instead, see *Folders service* below (`FOLDERS_URL`).
 2. Start it:
    ```sh
    docker compose up -d
@@ -149,17 +149,22 @@ Keep *Analyze page dimensions* enabled on your libraries (it is by default). Scr
 
 The notifier polls each server every `POLL_MINUTES` minutes and sends one notification per followed series, even when several chapters arrive together. Its keys and the list of subscribed devices are kept in `data/notifier/`.
 
-## Folders service (optional, in development)
+## Folders service (optional)
 
-`folders/` is a small Node service that will let Scrollarr read manga stored in plain folders on your server, without Suwayomi or Komga. **It is not connected to the app yet**: the service is secured and serves the structure (libraries, series, chapters), the pages of image folders and CBZ/ZIP archives (streamed, never extracted to disk) and a simple cover per series over HTTP. Reading progress and the integration into the app come in later steps (see `docs/design/READ-002-connecteur-dossiers.md`). Reading rules, limits and how changes in the folders are detected: `folders/README.md`.
+`folders/` is a small Node service that lets Scrollarr read manga stored in plain folders on your server, **without Suwayomi or Komga**. In the app it is a third reader named *Folders*, added last in the priority order (when a series has the same title on another server, the other one wins). It serves libraries, series and chapters, the pages of image folders and CBZ/ZIP archives (streamed, never extracted to disk) and a simple cover per series. Reading rules, limits and how changes in the folders are detected: `folders/README.md`; design and decisions: `docs/design/READ-002-connecteur-dossiers.md`.
+
+**Already have Komga?** Point Komga at the folder instead: it does everything the folders service does and more. The folders service is for people who want Scrollarr alone, or who keep plain folders of images.
 
 It mounts your scans **read-only**, never receives a path from the client (only opaque identifiers), never follows symbolic links, and publishes no port: only the Scrollarr container will reach it, through a dedicated internal Docker network.
 
 ```sh
 mkdir -p data/folders && sudo chown 1000:1000 data/folders    # data folder, writable by the service
 echo 'FOLDERS_SCANS_PATH=/path/to/scans' >> .env              # one folder = one library (see docker-compose.yml)
+echo 'FOLDERS_URL=http://folders:8788' >> .env                # lets Scrollarr reach the service (empty = not used)
 docker compose --profile folders up -d --build
 ```
+
+Then open Scrollarr: *Folders* appears among the servers (*Settings > Servers*). The service is only reachable by the Scrollarr container, through the internal network `folders_net`; `FOLDERS_URL` is the only thing the app needs.
 
 **The service refuses to start without an explicit authentication mode.** Set `FOLDERS_AUTH` in `.env`:
 
@@ -179,6 +184,14 @@ Any other value, a missing password, a password shorter than 12 characters, an u
 **Layout.** A library is a folder mounted under `/libraries/<name>`; a series is a sub-folder; a chapter is a `.cbz`/`.zip` archive or a folder directly containing images (intermediate folders such as volumes are tolerated, 3 levels at most). Reading order is the natural sort of names (`Chapter 2` before `Chapter 10`). Details, warnings and renaming effects: see the study.
 
 **Pages and covers.** Page and cover images are served as they are (JPEG, PNG, WebP, GIF, AVIF, recognised by their first bytes, never by their extension; anything else, SVG included, is refused). Archives are read in place with [`yauzl`](https://github.com/thejoshwolfe/yauzl), the service's only dependency (version locked in `folders/package-lock.json`); hostile or oversized archives are refused with a readable error (limits in `folders/README.md`).
+
+**What a folders-only install does not have.** Profiles and subscriptions are stored by the *servers* (Suwayomi "meta", Komga "client settings"), and the folders service deliberately stores neither. With *Folders* as the only server:
+- no profile management (*Settings* says so, and the *Who is reading?* screen is replaced by an explanation);
+- subscriptions stay on the device that made them: they are not shared between devices;
+- no genre filter, no "New chapters" and "New series" rows (the home screen shows "Recent updates", ordered by the date of the series folder);
+- the reading-status filter of the library appears with the reading progress (next step).
+
+Add Suwayomi or Komga next to it and all of this comes back, stored by that server. Renaming or moving a chapter or a series folder creates a new item (see the study, §4.7).
 
 **Data.** `data/folders/` holds a session signing key and a small file remembering which libraries have held series. Back it up by copying it. A library that cannot be read, or that is empty although it used to hold series (share not mounted, encrypted folder locked), is reported `unavailable` in `/health` and answers `503`, never `404`: with a `404` the app would delete your subscriptions.
 
@@ -203,9 +216,10 @@ The demo server imitates Suwayomi and Komga with a generated library.
 
 | Variable | Effect |
 | --- | --- |
-| `SERVERS=suwayomi` | "Configure" a single server (`suwayomi`, `komga`, or both) |
+| `SERVERS=suwayomi` | "Configure" only some servers (`suwayomi`, `komga`, `folders`, comma separated) |
 | `SUWA_AUTH=none\|basic\|simple\|ui` | Authentication mode of the mock Suwayomi (credentials `demo` / `demo`) |
 | `NOTIFIER=http://127.0.0.1:8787` | Relay `/notify/` to a local notifier |
+| `FOLDERS=http://127.0.0.1:8788` | Relay `/folders/` to a real folders service (`SERVERS=folders`); see `tests/e2e_folders.py` |
 
 `POST /suwayomi/__mock/add-chapter?manga=2` and `POST /komga/__mock/add-book?series=S004` simulate a new chapter.
 
@@ -285,7 +299,6 @@ Security policy: [SECURITY.md](SECURITY.md). Contributing guide: [CONTRIBUTING.m
 
 The full roadmap and its current status live in [docs/ROADMAP.md](docs/ROADMAP.md) (French).
 
-- A "folders" connector: read plain folders of images dropped on the server, without Suwayomi or Komga.
 - Connectors for other servers (Kavita…).
 - iOS and Android apps by wrapping this code with [Capacitor](https://capacitorjs.com); same-origin sessions will then have to become tokens, with images loaded through `fetch`.
 - Browsing Suwayomi's sources and adding a manga to the library from Scrollarr.

@@ -76,7 +76,7 @@ export function createHandler({ config, auth, libraries, reading, version }) {
       const profile = url.searchParams.get('profile');
       if (profile !== null && !PROFILE.test(profile)) throw new HttpError(400, 'paramètre profile invalide');
       const page = intParam(url, 'page', 0, 0, 1e6);
-      const size = intParam(url, 'size', 30, 1, 500);
+      const size = intParam(url, 'size', 30, 1, 1000); // l'application demande jusqu'à 1000 séries par page pour fusionner les listes
       const library = url.searchParams.get('library') || undefined;
       const result = await libraries.listSeries({ library, search: url.searchParams.get('search') || '', sort, page, size });
       return send(res, 200, {

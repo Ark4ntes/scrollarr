@@ -9,6 +9,7 @@
 //   SERVERS=suwayomi,komga   serveurs « configurés » (défaut : les deux)
 //   PORT=8380            port d'écoute
 //   NOTIFIER=http://127.0.0.1:8787   relaie /notify/* vers le notifier
+//   FOLDERS=http://127.0.0.1:8788    relaie /folders/* vers le vrai service Dossiers (SERVERS=folders pour l'annoncer)
 //   POST /komga/__mock/add-book?series=<id>   simule l'arrivée d'un chapitre
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -20,6 +21,7 @@ import { createSuwayomiMock } from './mock-suwayomi.mjs';
 const PORT = Number(process.env.PORT || 8380);
 const ENABLED = (process.env.SERVERS || 'suwayomi,komga').split(',').map((x) => x.trim());
 const NOTIFIER = process.env.NOTIFIER || '';
+const FOLDERS = process.env.FOLDERS || '';
 const APP_DIR = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'app');
 const USER = { id: 'U1', email: 'demo@scrollarr.local', roles: ['ADMIN', 'USER'], sharedAllLibraries: true, sharedLibrariesIds: [], labelsAllow: [], labelsExclude: [] };
 const PASSWORD = 'demo';
@@ -370,6 +372,23 @@ async function proxy(req, res, target) {
   } catch { send(res, 502, { error: 'notifier unreachable' }); }
 }
 
+/**
+ * Relais en flux vers le service Dossiers, comme le fait nginx : l'en-tête Host d'origine est conservé (le service
+ * le compare à Origin), X-Forwarded-For porte l'adresse vue ici, et un service arrêté donne 502.
+ */
+function relay(req, res, target, path) {
+  const t = new URL(target);
+  const headers = { ...req.headers, 'x-forwarded-for': [req.headers['x-forwarded-for'], req.socket.remoteAddress].filter(Boolean).join(', ') };
+  delete headers.connection;
+  const up = http.request({ host: t.hostname, port: t.port, method: req.method, path, headers }, (r) => {
+    res.writeHead(r.statusCode, r.headers);
+    r.pipe(res);
+  });
+  up.on('error', () => { if (res.headersSent) res.destroy(); else send(res, 502, { error: 'folders unreachable' }); });
+  res.on('close', () => up.destroy());
+  req.pipe(up);
+}
+
 const suwayomi = createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody, cookie });
 
 let outage = 'off';
@@ -380,12 +399,12 @@ http.createServer(async (req, res) => {
     // les serveurs restent sans réponse (hang), ou sont refusées par un proxy (deny).
     //   POST /__mock/outage?mode=hang|deny|off
     if (url.pathname === '/__mock/outage') { outage = url.searchParams.get('mode') || 'off'; return send(res, 200, { outage }); }
-    if (outage !== 'off' && (url.pathname.startsWith('/komga/') || url.pathname.startsWith('/suwayomi/'))) {
+    if (outage !== 'off' && (url.pathname.startsWith('/komga/') || url.pathname.startsWith('/suwayomi/') || url.pathname.startsWith('/folders/'))) {
       if (outage === 'hang') return; // jamais de réponse
       res.writeHead(403, { 'Content-Type': 'text/html' }); return res.end('<html><body>Forbidden</body></html>');
     }
     if (url.pathname === '/servers.json') {
-      return send(res, 200, { komga: ENABLED.includes('komga'), suwayomi: ENABLED.includes('suwayomi') }, { 'Cache-Control': 'no-store' });
+      return send(res, 200, { komga: ENABLED.includes('komga'), suwayomi: ENABLED.includes('suwayomi'), folders: ENABLED.includes('folders') && !!FOLDERS }, { 'Cache-Control': 'no-store' });
     }
     if (url.pathname.startsWith('/komga/')) {
       if (!ENABLED.includes('komga')) return send(res, 404, { error: 'not configured' });
@@ -394,6 +413,10 @@ http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/suwayomi/')) {
       if (!ENABLED.includes('suwayomi')) return send(res, 404, { error: 'not configured' });
       return await suwayomi(req, res, url.pathname.slice(9), url.searchParams);
+    }
+    if (url.pathname.startsWith('/folders/')) {
+      if (!ENABLED.includes('folders') || !FOLDERS) return send(res, 404, { error: 'not configured' });
+      return relay(req, res, FOLDERS, url.pathname.slice(8) + url.search);
     }
     if (url.pathname.startsWith('/notify/')) {
       if (!NOTIFIER) return send(res, 404, { error: 'notifier not configured' });

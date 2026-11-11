@@ -70,7 +70,7 @@ export async function login(root, _params, { onDone }) {
     const on = all.filter((s) => s.enabled);
     const off = all.filter((s) => !s.enabled);
     if (!all.length) {
-      lead.textContent = t('Aucun serveur n’est configuré sur cette installation. Renseignez KOMGA_URL ou SUWAYOMI_URL dans le fichier .env, puis redémarrez Scrollarr.');
+      lead.textContent = t('Aucun serveur n’est configuré sur cette installation. Renseignez KOMGA_URL, SUWAYOMI_URL ou FOLDERS_URL dans le fichier .env, puis redémarrez Scrollarr.');
       fill(list);
       fill(footer);
       return;
