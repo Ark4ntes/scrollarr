@@ -24,6 +24,8 @@ jobs:
         run: node tests/unit_contracts.mjs
       - name: Task model (unit)
         run: node tests/unit_tasks.mjs
+      - name: Facade (unit)
+        run: node tests/unit_facade.mjs
 
   e2e:
     name: e2e
@@ -59,6 +61,9 @@ jobs:
       - name: E2E collector tasks
         if: ${{ !cancelled() }}
         run: python tests/e2e_tasks.py
+      - name: E2E reader without progress
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_progress.py
       - name: E2E unreachable server
         if: ${{ !cancelled() }}
         run: python tests/e2e_offline.py
