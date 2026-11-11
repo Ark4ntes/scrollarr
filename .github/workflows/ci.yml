@@ -81,7 +81,7 @@ jobs:
       - name: E2E folders reader (real service, none and password modes, offline, next to Suwayomi)
         if: ${{ !cancelled() }}
         run: python tests/e2e_folders.py
-      - name: E2E folders progress (real service: resume, restart, network cut, folders-only UI)
+      - name: E2E folders progress (real service, resume, restart, network cut, folders-only UI)
         if: ${{ !cancelled() }}
         run: python tests/e2e_folders_progress.py
       - name: Upload screenshots
