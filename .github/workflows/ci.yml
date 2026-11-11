@@ -144,3 +144,6 @@ jobs:
       - name: Folders container (read-only mounts, health)
         run: tests/container_folders.sh
         if: ${{ !cancelled() }}
+      - name: Images built from sources with restrictive file modes
+        run: tests/container_perms.sh
+        if: ${{ !cancelled() }}

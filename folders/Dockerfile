@@ -9,6 +9,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 COPY *.js ./
+# Même précaution que pour l'image principale : lisible par l'utilisateur du service.
+RUN chmod -R a+rX /app
 ENV FOLDERS_PORT=8788
 VOLUME /data
 EXPOSE 8788

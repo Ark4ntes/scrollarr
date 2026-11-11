@@ -7,6 +7,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 COPY server.js ./
+# Même précaution que pour l'image principale : lisible par l'utilisateur « node ».
+RUN chmod -R a+rX /app
 ENV DATA_DIR=/data PORT=8787
 VOLUME /data
 EXPOSE 8787

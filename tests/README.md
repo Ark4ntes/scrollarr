@@ -40,6 +40,7 @@ node tests/unit_folders_archive.mjs  # folders service: hostile archives built b
 node tests/integration_folders_pages.mjs  # folders service: pages, covers, 304, streaming of a 120 MB archive, nothing written (~3 s)
 node tests/integration_folders_invalidation.mjs  # folders service: one test per row of the events table of the study (~4 s)
 tests/container_folders.sh           # folders image with read-only mounts, reads a page and a cover inside it (needs Docker)
+tests/container_perms.sh        # images still work when the sources were fetched with modes 600/700 (needs Docker)
 python3 tests/nginx_headers.py # security headers on every nginx location, /folders/ included (JSON, image, 401, write, service stopped, variable empty); template rendered and run locally (needs nginx, curl; ~4 s)
 node tests/unit_profiles.mjs    # profile sync: independent documents, list merge (~8 s)
 node tests/unit_store.mjs       # subscriptions: a 404 must be seen twice, 24 h apart, before deleting (instant)

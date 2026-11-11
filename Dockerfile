@@ -9,6 +9,10 @@ LABEL org.opencontainers.image.title="Scrollarr" \
 COPY app/ /usr/share/nginx/html/
 # Le modèle est rendu au démarrage par le mécanisme « templates » de l'image officielle.
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+# Les droits des fichiers copiés sont ceux du dossier d'origine. Selon la façon dont le
+# dépôt a été récupéré (archive extraite sur un NAS, umask restrictif, ACL), ils peuvent
+# être illisibles pour l'utilisateur de nginx : on les rend lisibles par tous, sans écriture.
+RUN chmod -R a+rX /usr/share/nginx/html /etc/nginx/templates
 
 # Les trois variables doivent exister, même vides (vide = serveur non configuré).
 ENV KOMGA_URL="" SUWAYOMI_URL="" FOLDERS_URL=""
