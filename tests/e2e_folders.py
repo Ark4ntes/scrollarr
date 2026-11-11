@@ -53,7 +53,7 @@ def none_mode(b):
     check('1 library: 7 series', pg.locator('.grid .card').count() == 7, pg.locator('.grid .card').count())
     chips = pg.eval_on_selector_all('.chips .chip', 'e=>e.map(x=>x.textContent)')
     check('1 library: two libraries offered as filters', chips == ['Tout', 'Autre', 'Scans'], chips)
-    check('1 library: no reading-status filter yet (this reader does not track reading)', pg.locator('.filters select').count() == 1, pg.locator('.filters select').count())
+    check('1 library: the reading-status filter is offered (the reader tracks reading), next to the sort', pg.locator('.filters select').count() == 2, pg.locator('.filters select').count())
     check('1 library: covers displayed', images_ok(pg, '.grid .card-img img'))
     shot(pg, '70-folders-library.png')
     pg.click('.chips .chip >> text=Autre'); pg.wait_for_timeout(700)
@@ -78,7 +78,7 @@ def none_mode(b):
 
     # Hors ligne : téléchargement, puis lecture service arrêté.
     pg.goto(B + '/#/series/' + bid.split('.')[0]); pg.wait_for_selector('.eps .ep')
-    pg.click('.sactions .btn >> text=Télécharger'); pg.wait_for_selector('.sheet'); pg.click('.action >> text=Les 5 prochains chapitres')
+    pg.click('.sactions .btn >> text=Télécharger'); pg.wait_for_selector('.sheet'); pg.click('.action >> text=Toute la série')
     pg.wait_for_function("document.querySelectorAll('.dl.done').length === 3", timeout=30000)
     check('1 offline: three chapters downloaded', True)
     stop(svc)

@@ -17,6 +17,7 @@ const LIMITS = {
   FOLDERS_LOGIN_ATTEMPTS: ['loginAttempts', 5, 1, 100],
   FOLDERS_LOGIN_WINDOW_SECONDS: ['loginWindowSeconds', 900, 10, 86400],
   FOLDERS_TRUST_PROXY: ['trustProxy', 0, 0, 1],
+  FOLDERS_PROGRESS_FLUSH_SECONDS: ['progressFlushSeconds', 3, 0, 60], // regroupement des écritures de progression (0 : tout de suite)
 };
 const TEXTS = ['FOLDERS_AUTH', 'FOLDERS_USER', 'FOLDERS_PASSWORD', 'FOLDERS_LIBRARIES_DIR', 'FOLDERS_DATA_DIR', 'FOLDERS_COOKIE_PATH'];
 export const KNOWN = new Set([...Object.keys(LIMITS), ...TEXTS]);
@@ -49,6 +50,7 @@ export function readConfig(env) {
     config[key] = n;
   }
   config.trustProxy = config.trustProxy === 1;
+  config.progressFlushMs = config.progressFlushSeconds * 1000;
 
   config.librariesDir = text('FOLDERS_LIBRARIES_DIR') || '/libraries';
   config.dataDir = text('FOLDERS_DATA_DIR') || '/data';

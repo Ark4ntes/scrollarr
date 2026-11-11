@@ -36,6 +36,37 @@ await test('the reader respects the reader contract', () => {
 await test('it never declares settings.store (profiles and subscriptions are not its business)', () => {
   assert.ok(!reader().capabilities.includes(CAP.SETTINGS_STORE));
 });
+await test('it declares progress read and write, and implements every member that goes with them', () => {
+  const r = reader();
+  assert.ok(r.capabilities.includes(CAP.PROGRESS_READ) && r.capabilities.includes(CAP.PROGRESS_WRITE));
+  for (const m of ['saveProgress', 'markBookRead', 'markBookUnread', 'markSeriesRead', 'markSeriesUnread', 'booksInProgress', 'booksRecentlyRead']) assert.equal(typeof r[m], 'function', m);
+});
+await test('progress: saveProgress and the mark-read calls hit the right routes, with a JSON body even when empty', async () => {
+  const r = reader();
+  answer = () => new Response(null, { status: 204 });
+  await r.saveProgress('s.b', 4, false, { keepalive: true });
+  await r.markBookRead('s.b');
+  await r.markBookUnread('s.b');
+  await r.markSeriesRead('s');
+  await r.markSeriesUnread('s');
+  const seen = calls.map((c) => `${c.method} ${c.url}`);
+  assert.deepEqual(seen, ['PATCH /folders/api/v1/books/s.b/progress', 'PATCH /folders/api/v1/books/s.b/progress', 'DELETE /folders/api/v1/books/s.b/progress',
+    'PUT /folders/api/v1/series/s/progress', 'DELETE /folders/api/v1/series/s/progress']);
+  assert.deepEqual(JSON.parse(calls[0].body), { page: 4, completed: false });
+  assert.deepEqual(JSON.parse(calls[1].body), { completed: true });
+  for (const c of calls) assert.ok(c.body !== undefined && JSON.parse(c.body), 'corps JSON présent : ' + c.method + ' ' + c.url);
+  for (const c of calls) assert.equal(new Headers(c.headers).get('content-type'), 'application/json');
+});
+await test('progress: in-progress and recently-read lists, and the reading status filter', async () => {
+  const r = reader();
+  answer = () => json({ content: [] });
+  await r.booksInProgress(12);
+  await r.booksRecentlyRead(100);
+  await r.seriesList({ readStatus: 'IN_PROGRESS', size: 5 });
+  await r.seriesList({ size: 5 });
+  assert.deepEqual(calls.map((c) => c.url), ['/folders/api/v1/books/inprogress?size=12', '/folders/api/v1/books/recent?size=100',
+    '/folders/api/v1/series?status=IN_PROGRESS&sort=metadata.titleSort%2Casc&page=0&size=5', '/folders/api/v1/series?sort=metadata.titleSort%2Casc&page=0&size=5']);
+});
 await test('registered last, with a code no other reader uses', () => {
   const ids = READERS.map((r) => r.id);
   assert.equal(ids.at(-1), 'folders');

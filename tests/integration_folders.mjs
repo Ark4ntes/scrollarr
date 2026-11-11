@@ -36,7 +36,7 @@ test('series of a library: sorted by title, common model, paging', async () => {
   assert.equal(res.json.totalElements, 6);
   const s = scans[0];
   assert.ok(ID.test(s.id) && s.libraryId === scansId);
-  assert.deepEqual(Object.keys(s).sort(), ['booksCount', 'created', 'id', 'lastModified', 'libraryId', 'metadata', 'name']);
+  assert.deepEqual(Object.keys(s).sort(), ['booksCount', 'booksInProgressCount', 'booksReadCount', 'booksUnreadCount', 'created', 'id', 'lastModified', 'libraryId', 'metadata', 'name']);
   assert.equal(s.booksCount, 3);
   const p = seen(await api(`/api/v1/series?library=${scansId}&size=4&page=1`));
   assert.deepEqual([p.json.content.length, p.json.last], [2, true]);
@@ -50,7 +50,8 @@ test('series list: search, sort, and refused parameters', async () => {
   assert.equal((await api('/api/v1/series?size=1000')).status, 200); // la fusion des listes de l'application demande jusqu'à 1000
   assert.equal((await api('/api/v1/series?size=1001')).status, 400);
   assert.equal((await api('/api/v1/series?page=-1')).status, 400);
-  assert.equal((await api('/api/v1/series?status=IN_PROGRESS')).status, 400); // pas de filtre simulé avant l'étape C
+  assert.equal((await api('/api/v1/series?status=DONE')).status, 400);
+  assert.equal((await api('/api/v1/series?status=IN_PROGRESS')).status, 200); // filtre par état de lecture (progression, étape C2)
   assert.equal((await api('/api/v1/series?profile=../x')).status, 400);
   assert.equal((await api('/api/v1/series?profile=main')).status, 200);
   assert.equal((await api('/api/v1/series?library=0000000000000000')).status, 404);

@@ -6,7 +6,7 @@
 //   FOLDERS_USER, FOLDERS_PASSWORD   mode password (mot de passe de 12 caractères au moins)
 //   FOLDERS_PORT      port d'écoute (défaut : 8788)
 //   FOLDERS_RESCAN_MINUTES, FOLDERS_SESSION_HOURS, FOLDERS_LOGIN_ATTEMPTS,
-//   FOLDERS_LOGIN_WINDOW_SECONDS, FOLDERS_TRUST_PROXY, FOLDERS_COOKIE_PATH,
+//   FOLDERS_LOGIN_WINDOW_SECONDS, FOLDERS_TRUST_PROXY, FOLDERS_COOKIE_PATH, FOLDERS_PROGRESS_FLUSH_SECONDS,
 //   FOLDERS_LIBRARIES_DIR (défaut : /libraries), FOLDERS_DATA_DIR (défaut : /data)
 import { start } from './app.js';
 import { ConfigError } from './config.js';

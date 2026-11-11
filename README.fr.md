@@ -186,11 +186,13 @@ Toute autre valeur, un mot de passe absent ou de moins de 12 caractères, une va
 - pas de gestion des profils (les *Réglages* l'expliquent, et l'écran « Qui lit ? » est remplacé par une explication) ;
 - les abonnements restent sur l'appareil qui les a faits : ils ne sont pas partagés entre appareils ;
 - pas de filtre par genre, ni de rangées « Nouveaux chapitres » et « Nouvelles séries » (l'accueil montre les « Mises à jour récentes », classées par date du dossier de la série) ;
-- le filtre d'état de lecture de la bibliothèque arrive avec la progression de lecture (étape suivante).
+- pas de rangée « À suivre » (le chapitre suivant d'une série entamée n'est pas proposé).
 
 Ajoutez Suwayomi ou Komga à côté et tout cela revient, rangé par ce serveur. Renommer ou déplacer le dossier d'un chapitre ou d'une série crée un nouvel élément (voir l'étude, §4.7).
 
-**Données.** `data/folders/` contient la clé de signature des sessions et un petit fichier qui retient quelles bibliothèques ont déjà contenu des séries. Sauvegarde : copier ce dossier. Une bibliothèque illisible, ou vide alors qu'elle contenait des séries (partage non monté, dossier chiffré verrouillé), est signalée `unavailable` par `/health` et répond `503`, jamais `404` : avec un `404`, l'application supprimerait vos abonnements.
+**Progression de lecture.** Le service l'enregistre lui-même : elle survit aux redémarrages et elle est partagée par tous les appareils qui ouvrent le même Scrollarr (page atteinte, chapitre terminé, date). Le lecteur reprend où l'on s'est arrêté, l'*Accueil* propose « Reprendre » et les chapitres lus récemment, on peut marquer un chapitre ou une série comme lu ou non lu, et filtrer la bibliothèque par état de lecture. Hors ligne, la progression est mise en attente sur l'appareil puis renvoyée, comme avec les autres serveurs. Tant que la progression par profil n'existe pas, tout est rangé sous un seul profil (`main`) : tous ceux qui utilisent l'installation partagent le même historique. Le service regroupe les écritures : une écriture par fichier au plus toutes les `FOLDERS_PROGRESS_FLUSH_SECONDS` secondes (3 par défaut, 0 = immédiat, 60 au plus), et une dernière à l'arrêt normal ; un arrêt brutal (`SIGKILL`, coupure de courant) ne peut faire perdre que les dernières secondes.
+
+**Données.** `data/folders/` contient la clé de signature des sessions, un petit fichier qui retient quelles bibliothèques ont déjà contenu des séries, et `progress/` (un petit fichier JSON par série et par profil). Sauvegarde : copier ce dossier. Un fichier de progression illisible est mis de côté sous `<nom>.json.corrupt` (jamais réécrit par-dessus) et la série repart de zéro ; un avertissement, sans aucun chemin, est écrit dans les journaux. Une bibliothèque illisible, ou vide alors qu'elle contenait des séries (partage non monté, dossier chiffré verrouillé), est signalée `unavailable` par `/health` et répond `503`, jamais `404` : avec un `404`, l'application supprimerait vos abonnements.
 
 **Essayer sans NAS.**
 

@@ -135,10 +135,17 @@ test('an Origin that does not match the host is refused, on any method; a matchi
   assert.equal((await get(app, '/api/v1/libraries', { Origin: `https://${host(app)}` })).status, 200);
 }));
 test('no CORS: OPTIONS and other methods are refused and no Access-Control header is ever sent', () => withNone(async (app) => {
-  for (const method of ['OPTIONS', 'PUT', 'PATCH', 'DELETE', 'HEAD']) {
+  for (const method of ['OPTIONS', 'TRACE', 'HEAD']) {
     const res = await request(app, method, '/api/v1/libraries', { headers: { Origin: `http://${host(app)}`, 'Access-Control-Request-Method': 'POST' } });
     assert.equal(res.status, 405, method);
     assert.ok(!Object.keys(res.headers).some((h) => h.startsWith('access-control-')), method);
+  }
+  // PUT, PATCH et DELETE servent à la progression : sans les en-têtes exigés, ils sont refusés comme tout écrit inter-origines.
+  for (const method of ['PUT', 'PATCH', 'DELETE']) {
+    const res = await request(app, method, '/api/v1/libraries', { headers: { Origin: `http://${host(app)}`, 'Access-Control-Request-Method': 'POST' } });
+    assert.equal(res.status, 403, method);
+    assert.ok(!Object.keys(res.headers).some((h) => h.startsWith('access-control-')), method);
+    assert.equal((await request(app, method, '/api/v1/libraries', { headers: JSON_POST, body: '{}' })).status, 404, `${method} sur une route qui n'existe pas`);
   }
   const ok = await get(app, '/api/v1/libraries', { Origin: `http://${host(app)}` });
   assert.ok(!Object.keys(ok.headers).some((h) => h.startsWith('access-control-')));

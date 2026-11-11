@@ -1,4 +1,5 @@
 // « Qui lit ? » : choix, création et gestion des profils.
+import * as api from '../api.js';
 import * as profiles from '../profiles.js';
 import { h, add, fill, icon, sheet, actionSheet, toast } from '../ui.js';
 import { t } from '../i18n.js';
@@ -23,6 +24,15 @@ function nameSheet(title, initial, action, onSave) {
 }
 
 export async function profilesView(root) {
+  // Sans serveur qui range les profils (installation « Dossiers » seule) : rien à gérer, aucune écriture tentée.
+  if (!api.hasStore() && profiles.list().length <= 1) {
+    add(root, h('div.who',
+      h('header.who-head',
+        h('button.iconbtn', { type: 'button', 'aria-label': t('Retour'), onclick: () => back('/more') }, icon('back')),
+        h('h1', t('Qui lit ?'))),
+      h('p.note', t('Gérer les profils sur ce serveur n’est pas possible : les profils et les abonnements ont besoin d’un serveur Suwayomi ou Komga.'))));
+    return;
+  }
   const listEl = h('ul.profiles');
   const choosing = profiles.needsChoice();
 

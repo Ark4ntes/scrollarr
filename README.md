@@ -189,11 +189,13 @@ Any other value, a missing password, a password shorter than 12 characters, an u
 - no profile management (*Settings* says so, and the *Who is reading?* screen is replaced by an explanation);
 - subscriptions stay on the device that made them: they are not shared between devices;
 - no genre filter, no "New chapters" and "New series" rows (the home screen shows "Recent updates", ordered by the date of the series folder);
-- the reading-status filter of the library appears with the reading progress (next step).
+- no "on deck" row (the next chapter of a series in progress is not suggested).
 
 Add Suwayomi or Komga next to it and all of this comes back, stored by that server. Renaming or moving a chapter or a series folder creates a new item (see the study, §4.7).
 
-**Data.** `data/folders/` holds a session signing key and a small file remembering which libraries have held series. Back it up by copying it. A library that cannot be read, or that is empty although it used to hold series (share not mounted, encrypted folder locked), is reported `unavailable` in `/health` and answers `503`, never `404`: with a `404` the app would delete your subscriptions.
+**Reading progress.** The service stores it itself, so it survives restarts and is shared by every device that opens the same Scrollarr: the page reached, whether the chapter is finished, and the date. The reader resumes where it stopped, *Home* shows "Continue reading" and the recently read chapters, chapters and series can be marked read or unread, and the library can be filtered by reading status. Offline, progress is queued on the device and sent back later, as with the other servers. Until per-profile progress arrives, everything is stored under one profile (`main`): everyone who uses the install shares one history. The service groups writes: at most one write per file every `FOLDERS_PROGRESS_FLUSH_SECONDS` seconds (3 by default, 0 = immediately, 60 at most) and a last one when it stops normally; a hard kill (`SIGKILL`, power loss) can lose the last few seconds only.
+
+**Data.** `data/folders/` holds a session signing key, a small file remembering which libraries have held series, and `progress/` (one small JSON file per series and profile). Back it up by copying it. A progress file that cannot be read is set aside as `<name>.json.corrupt` (never overwritten) and that series starts again from zero; a warning without any path is logged. A library that cannot be read, or that is empty although it used to hold series (share not mounted, encrypted folder locked), is reported `unavailable` in `/health` and answers `503`, never `404`: with a `404` the app would delete your subscriptions.
 
 **Try it without a NAS.**
 

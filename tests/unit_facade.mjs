@@ -92,5 +92,9 @@ await test('the reading-status filter is offered only when every used server can
   assert.equal(api.canFilterByStatus(), false);
 });
 
+await test('hasStore is true only when an enabled server declares settings.store (none of the test readers does)', () => {
+  assert.equal(api.hasStore(), false);
+});
+
 console.log(failed ? `\n${failed} test(s) failed` : '\nAll facade unit tests passed');
 process.exit(failed ? 1 : 0);

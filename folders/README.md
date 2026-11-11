@@ -2,7 +2,7 @@
 
 Petit service Node qui lit des dossiers de scans montés **en lecture seule** : dossiers d'images et archives CBZ/ZIP. Il n'écrit jamais dans les scans, ne reçoit jamais de chemin de la part du client (seulement des identifiants opaques) et n'extrait rien sur disque. Étude d'architecture : `docs/design/READ-002-connecteur-dossiers.md` (les renvois `§` ci-dessous y pointent). Installation, variables d'environnement et sécurité : `README.md` à la racine du dépôt.
 
-Ce document décrit ce que fait le service quand il **lit les contenus** et comment il **détecte les changements** dans les dossiers.
+Ce document décrit ce que fait le service quand il **lit les contenus**, comment il **détecte les changements** dans les dossiers et comment il **enregistre la progression**.
 
 ## Routes de lecture
 
@@ -22,6 +22,28 @@ Les formes d'URL sont celles que reconnaissent déjà les expressions de `app/sw
 **Nombre de pages d'une archive.** Il n'est connu qu'après la première ouverture de l'archive (liste des pages ou lecture d'une page) : `media.pagesCount` vaut `null` jusqu'alors, puis le nombre est mémorisé tant que la taille et la date de l'archive ne changent pas. Un dossier d'images donne son nombre dès le parcours. Le calcul lit le répertoire central de l'archive, jamais le contenu des entrées.
 
 **Couverture.** `cover.jpg`, `.jpeg`, `.png` ou `.webp` à la racine du dossier de la série (le premier dans l'ordre naturel s'il y en a plusieurs) ; sinon la première page du premier chapitre. Rien n'est redimensionné : le poids est celui de l'image d'origine (à mesurer, procédure `docs/qa/READ-002-B4-essais-nas.md`). Un `cover.*` qui n'est pas une image donne 415 : il n'y a pas de repli.
+
+## Progression (§4.4, §4.6)
+
+Modèle : un enregistrement par (profil, série, chapitre) : `{ page, completed, date, pages }`. Le profil est un identifiant opaque (`?profile=`, 1 à 32 lettres ou chiffres, `main` par défaut) : le service ne connaît ni les noms ni la liste des profils (50 profils distincts au plus). Les écritures exigent les mêmes garde-fous que toute requête non `GET` (`X-Requested-With`, `Content-Type: application/json`, `Origin`), corps de 64 Kio au plus ; en mode `password` toutes ces routes exigent la session.
+
+| Route | Effet |
+| --- | --- |
+| `PATCH /api/v1/books/{bid}/progress` | Corps `{ page?, completed? }`, 204. `page` seule : `completed` vaut « dernière page atteinte ». `completed: true` seul : page = dernière page connue. `page` au-delà du nombre de pages connu est ramenée à la dernière. Corps invalide : 400. Chapitre inconnu : 404, rien n'est enregistré. |
+| `DELETE /api/v1/books/{bid}/progress` | Chapitre non lu (idempotent), 204. |
+| `PUT /api/v1/series/{sid}/progress` | Tous les chapitres lus, 204. Les chapitres déjà lus gardent leur date. |
+| `DELETE /api/v1/series/{sid}/progress` | Tous les chapitres non lus, 204. |
+| `GET /api/v1/books/inprogress?size=` | Chapitres entamés et non terminés, du plus récent au plus ancien (`size` de 1 à 200, 20 par défaut). |
+| `GET /api/v1/books/recent?size=` | Tous les chapitres lus ou entamés, du plus récent au plus ancien. |
+| `GET /api/v1/series?status=UNREAD\|IN_PROGRESS\|READ` | Filtre d'état de lecture (autre valeur : 400), combinable avec `search`, `library`, le tri et la pagination. |
+
+Les séries et les chapitres portent `booksReadCount`, `booksInProgressCount`, `booksUnreadCount` (séries) et `readProgress { page, completed, readDate }` (chapitres, absent tant que rien n'est lu), comme Komga. `media.pagesCount` d'une archive vient de l'enregistrement quand l'archive n'a pas été rouverte depuis le démarrage : le nombre de pages est donc **conservé** avec la progression (c'est une indication : il peut dater d'avant un remplacement du fichier, jusqu'à la prochaine ouverture).
+
+**Stockage.** `<données>/progress/<profil>/<série>.json` = `{ idChapitre: [page, terminé 0/1, date en ms, nombre de pages ou null] }`. Interface de stockage (`folders/progress.js`) : `snapshot`, `setMany`, `clear`, `recent`, `forgetProfile`, `flush`, `close`, avec deux réalisations (fichiers, mémoire pour les tests). Écritures **atomiques** (fichier temporaire, `fsync`, renommage), une à la fois, regroupées : au plus une écriture par fichier toutes les `FOLDERS_PROGRESS_FLUSH_SECONDS` secondes (3 par défaut ; 0 = tout de suite) et une dernière à l'arrêt (`SIGTERM`). Une écriture qui échoue (disque plein, droits) garde l'entrée et recommence. Un dossier de progression illisible donne 503, jamais une table vide qu'une écriture ultérieure viendrait écraser.
+
+**Fichier corrompu.** JSON invalide ou forme inattendue : le fichier est renommé `<nom>.corrupt` (le dernier est gardé), un avertissement sans chemin est journalisé et la série repart de zéro ; il n'est jamais réécrit par-dessus, pour qu'une réparation à la main reste possible. Les entrées invalides d'un fichier sain sont ignorées. Un `.tmp` laissé par une coupure est ignoré (le fichier précédent est intact).
+
+**Ce qui n'est jamais purgé.** La progression d'un chapitre disparu est gardée (masquée des listes) et revient avec le fichier. Aucune purge automatique.
 
 ## Types et limites
 
@@ -75,7 +97,7 @@ Une entrée chiffrée ou compressée autrement n'est un problème que si c'est u
 | Événement | Ce qui se passe |
 | --- | --- |
 | Chapitre ou série ajouté | Visible à la prochaine relecture du niveau concerné (60 s ou 30 s au plus) |
-| Supprimé | 404 à la prochaine relecture. La progression (étape C) est gardée : l'identifiant redevient valide si le fichier revient au même chemin |
+| Supprimé | 404 à la prochaine relecture. La progression est gardée : l'identifiant redevient valide si le fichier revient au même chemin |
 | Renommé ou déplacé | L'ancien identifiant disparaît (404), un nouveau apparaît : progression à zéro |
 | Fichier remplacé | Détecté à la requête suivante, sans attendre aucun délai ; les pages changent d'`ETag`. Une copie hors ligne reste l'ancienne version |
 | Fichier disparu entre la liste et l'ouverture | 404, et la série concernée est relue immédiatement (chapitre, page ou couverture) |

@@ -34,6 +34,8 @@ node tests/unit_folders_config.mjs   # folders service: every invalid configurat
 node tests/unit_folders_auth.mjs     # folders service: password/none modes, sessions, attempt limit, cross-origin guards (~3 s)
 node tests/unit_folders_library.mjs  # folders service: index, invalidation, unavailable libraries (~1 s)
 node tests/integration_folders.mjs   # folders service started on a generated library, structure walked over HTTP (~1 s)
+node tests/unit_folders_progress.mjs  # folders service: progress store, atomic writes, batching, restart, corrupted files, profile limit (~2 s)
+node tests/integration_folders_progress.mjs  # folders service over HTTP: progress routes, status filter, restart, cross-origin rules on writes (~3 s)
 node tests/unit_folders_archive.mjs  # folders service: hostile archives built byte by byte, every reading limit, image types (~3 s)
 node tests/integration_folders_pages.mjs  # folders service: pages, covers, 304, streaming of a 120 MB archive, nothing written (~3 s)
 node tests/integration_folders_invalidation.mjs  # folders service: one test per row of the events table of the study (~4 s)
@@ -46,6 +48,7 @@ node tests/unit_folders_reader.mjs  # folders reader with a stubbed fetch: URLs,
 python tests/e2e_progress.py    # a reader that does not declare progress.write: no menu action, no request (~30 s)
 python tests/e2e_offline.py     # downloaded chapters when the server hangs, is refused by a proxy, or there is no network (~40 s)
 python tests/e2e_folders.py     # folders reader on the REAL folders service: none mode + offline, password mode, next to the mock Suwayomi (~1 min)
+python tests/e2e_folders_progress.py  # folders reader on the REAL service: resume after reload, service restart (SIGTERM, SIGKILL) and network cut, mark read/unread, home lists; folders-only UI without failed requests (~2 min)
 python tests/e2e_tasks.py       # collector tasks: progress, failure, cancellation, history (~40 s)
 ```
 

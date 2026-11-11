@@ -95,6 +95,11 @@ export async function test(serverId) {
   return { state: s.state, ms: Math.round(performance.now() - start) };
 }
 export const multi = () => active().length > 1;
+/**
+ * Vrai si un serveur activé sait ranger profils et abonnements (`settings.store`), même momentanément injoignable :
+ * sans lui (installation « Dossiers » seule), ils restent sur cet appareil et l'écran ne propose pas de les gérer.
+ */
+export const hasStore = () => servers.some((s) => s.enabled && s.c.capabilities.includes(CAP.SETTINGS_STORE));
 /** Vrai si chaque serveur utilisé sait dire où en est la lecture d'une série (filtre « Lecture » de la bibliothèque). */
 export const canFilterByStatus = () => active().every((c) => c.capabilities.includes(CAP.PROGRESS_READ));
 /** Change dès que l'ensemble des serveurs utilisés (ou la règle des doublons) change. */

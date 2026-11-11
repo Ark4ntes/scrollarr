@@ -237,7 +237,8 @@ export function createLibraries({ config, mounts, flags, log = console, onScan =
       return { running: running !== null, lastScan, ...totals(), warnings: allWarnings().slice(0, 1000) };
     },
 
-    async listSeries({ library, search = '', sort = 'metadata.titleSort,asc', page = 0, size = 30 }) {
+    /** `keep` : prédicat facultatif sur une série (filtre par état de lecture), appliqué avant la pagination. */
+    async listSeries({ library, search = '', sort = 'metadata.titleSort,asc', page = 0, size = 30, keep }) {
       await initial;
       const targets = library ? [...libs.values()].filter((l) => l.id === library) : [...libs.values()];
       if (library && targets.length === 0) throw new NotFound('bibliothèque introuvable');
@@ -247,6 +248,7 @@ export function createLibraries({ config, mounts, flags, log = console, onScan =
       const needle = searchKey(search.trim());
       let items = targets.flatMap((l) => [...l.series.values()].map((s) => ({ s, l })));
       if (needle) items = items.filter(({ s }) => searchKey(s.title).includes(needle));
+      if (keep) items = items.filter(({ s }) => keep(s));
       const [key, dir] = sort.split(',');
       const sign = dir === 'desc' ? -1 : 1;
       const byTitle = (a, b) => compareNames(a.s.title, b.s.title) || compareNames(a.l.name, b.l.name);

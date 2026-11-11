@@ -81,6 +81,9 @@ jobs:
       - name: E2E folders reader (real service, none and password modes, offline, next to Suwayomi)
         if: ${{ !cancelled() }}
         run: python tests/e2e_folders.py
+      - name: E2E folders progress (real service: resume, restart, network cut, folders-only UI)
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_folders_progress.py
       - name: Upload screenshots
         if: failure()
         uses: actions/upload-artifact@v4
@@ -125,6 +128,12 @@ jobs:
         if: ${{ !cancelled() }}
       - name: Folders invalidation (integration)
         run: node tests/integration_folders_invalidation.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders progress (store)
+        run: node tests/unit_folders_progress.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders progress (integration)
+        run: node tests/integration_folders_progress.mjs
         if: ${{ !cancelled() }}
       - name: Folders reader in the app (unit)
         run: node tests/unit_folders_reader.mjs

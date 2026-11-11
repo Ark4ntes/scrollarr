@@ -37,11 +37,12 @@ test('unknown FOLDERS_ variable (typo) is refused', () => {
   assert.doesNotThrow(() => readConfig({ ...good, OTHER: 'ok', PATH: '/bin' }));
 });
 test('numeric limits: non-numeric, negative, fractional, out of range are refused', () => {
-  for (const name of ['FOLDERS_PORT', 'FOLDERS_RESCAN_MINUTES', 'FOLDERS_SESSION_HOURS', 'FOLDERS_LOGIN_ATTEMPTS', 'FOLDERS_LOGIN_WINDOW_SECONDS', 'FOLDERS_TRUST_PROXY']) {
+  for (const name of ['FOLDERS_PORT', 'FOLDERS_RESCAN_MINUTES', 'FOLDERS_SESSION_HOURS', 'FOLDERS_LOGIN_ATTEMPTS', 'FOLDERS_LOGIN_WINDOW_SECONDS', 'FOLDERS_TRUST_PROXY', 'FOLDERS_PROGRESS_FLUSH_SECONDS']) {
     for (const v of ['abc', '-1', '1.5', '1e3', '0x10', '99999999999']) refuses({ ...good, [name]: v }, new RegExp(name));
   }
   refuses({ ...good, FOLDERS_PORT: '0' }, /FOLDERS_PORT/);
   refuses({ ...good, FOLDERS_PORT: '70000' }, /FOLDERS_PORT/);
+  refuses({ ...good, FOLDERS_PROGRESS_FLUSH_SECONDS: '61' }, /FOLDERS_PROGRESS_FLUSH_SECONDS/);
   refuses({ ...good, FOLDERS_LOGIN_ATTEMPTS: '0' }, /FOLDERS_LOGIN_ATTEMPTS/);
   refuses({ ...good, FOLDERS_TRUST_PROXY: '2' }, /FOLDERS_TRUST_PROXY/);
   refuses({ ...good, FOLDERS_COOKIE_PATH: 'folders' }, /COOKIE_PATH/);

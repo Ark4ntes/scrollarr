@@ -5,6 +5,8 @@
 // Ce que ce lecteur ne fait pas, volontairement (voir l'étude, §4.5) :
 //  - pas de `settings.store` : profils et abonnements restent chez les autres
 //    serveurs, ou sur l'appareil quand il n'y en a pas ;
+//  - la progression est enregistrée par le service (profil `main` tant que les profils
+//    par lecteur n'existent pas) ;
 //  - pas de genres, de nouveautés, de « à suivre » : les listes correspondantes sont vides.
 import { send, cached, unauthorized, qs, AuthError, ApiError } from '../../net.js';
 import { idb } from '../../idb.js';
@@ -44,7 +46,7 @@ export function createFolders({ base }) {
     code: 'f',
     label: t('Dossiers'),
     userLabel: 'Identifiant',
-    capabilities: [CAP.SERIES_LIST, CAP.SERIES_SEARCH, CAP.CHAPTER_LIST, CAP.CHAPTER_READ],
+    capabilities: [CAP.SERIES_LIST, CAP.SERIES_SEARCH, CAP.CHAPTER_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_READ, CAP.PROGRESS_WRITE],
 
     // ── Session ──
     // Mode « none » : aucune connexion à faire, le nom d'utilisateur reste vide
@@ -85,8 +87,8 @@ export function createFolders({ base }) {
     },
     genres: async () => [],
 
-    seriesList({ libraryId, search, sort = 'title', page = 0, size = 30 } = {}) {
-      return read('/api/v1/series' + qs({ library: libraryId, search, sort: SORTS[sort], page, size }));
+    seriesList({ libraryId, readStatus, search, sort = 'title', page = 0, size = 30 } = {}) {
+      return read('/api/v1/series' + qs({ library: libraryId, status: readStatus, search, sort: SORTS[sort], page, size }));
     },
     seriesNew: async () => ({ content: [] }),
     // Séries dont le dossier a été modifié le plus récemment : de quoi remplir l'accueil sans rien mémoriser.
@@ -98,8 +100,8 @@ export function createFolders({ base }) {
 
     booksLatest: async () => ({ content: [] }),
     booksOnDeck: async () => ({ content: [] }),
-    booksInProgress: async () => ({ content: [] }),
-    booksRecentlyRead: async () => ({ content: [] }),
+    booksInProgress: (size) => read('/api/v1/books/inprogress' + qs({ size })),
+    booksRecentlyRead: (size) => read('/api/v1/books/recent' + qs({ size })),
 
     book: (id) => read(`/api/v1/books/${id}`),
     async bookPages(id) {
@@ -113,5 +115,14 @@ export function createFolders({ base }) {
     // ── Images ──
     seriesThumb: (id) => `${base}/api/v1/series/${id}/thumbnail`,
     bookThumb: (id) => `${base}/api/v1/series/${seriesOf(id)}/thumbnail`,
+
+    // ── Progression ──
+    // Sans corps pour les routes qui n'en ont pas : request() en envoie un vide (Content-Type exigé par le service).
+    saveProgress: (bookId, page, completed, { keepalive } = {}) =>
+      request(`/api/v1/books/${bookId}/progress`, { method: 'PATCH', body: { page, completed }, keepalive }),
+    markBookRead: (id) => request(`/api/v1/books/${id}/progress`, { method: 'PATCH', body: { completed: true } }),
+    markBookUnread: (id) => request(`/api/v1/books/${id}/progress`, { method: 'DELETE' }),
+    markSeriesRead: (id) => request(`/api/v1/series/${id}/progress`, { method: 'PUT' }),
+    markSeriesUnread: (id) => request(`/api/v1/series/${id}/progress`, { method: 'DELETE' }),
   };
 }
