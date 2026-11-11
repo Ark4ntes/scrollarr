@@ -1,7 +1,7 @@
-// Routes HTTP du service (READ-002 §4.4), étape A : session, santé, structure.
+// Routes HTTP du service (READ-002 §4.4), étapes A et B : session, santé, structure, pages, couvertures.
 // Les objets suivent le modèle commun de l'application (celui de Komga).
 // Aucun chemin n'entre ni ne sort : seulement des identifiants.
-import { send, readJson, checkCrossOrigin, clientAddress, HttpError } from './http.js';
+import { send, readJson, checkCrossOrigin, clientAddress, notModified, sendNotModified, sendImage, HttpError } from './http.js';
 import { isSeriesId, isBookId } from './ids.js';
 import { stripLabels } from './naming.js';
 import { Unavailable, NotFound } from './library.js';
@@ -9,6 +9,7 @@ import { Unavailable, NotFound } from './library.js';
 const iso = (ms) => new Date(ms).toISOString();
 const SORT = /^(metadata\.titleSort|name|lastModified|created)(?:,(asc|desc))?$/;
 const PROFILE = /^[A-Za-z0-9]{1,32}$/;
+const PAGE_NUMBER = /^[1-9]\d{0,5}$/; // à partir de 1, comme Komga
 
 const seriesDto = (s, lib) => ({
   id: s.id, libraryId: lib.id, name: s.title, created: iso(s.created), lastModified: iso(s.lastModified),
@@ -28,7 +29,13 @@ function intParam(url, name, fallback, min, max) {
   return Number(raw);
 }
 
-export function createHandler({ config, auth, libraries, version }) {
+export function createHandler({ config, auth, libraries, reading, version }) {
+  /** Répond 304 si le client a la bonne version, sinon envoie l'image en flux. */
+  async function serve(req, res, source) {
+    if (notModified(req, source)) return sendNotModified(res, source);
+    return sendImage(res, source, await source.stream());
+  }
+
   async function route(req, res, url) {
     const path = url.pathname;
     const get = req.method === 'GET';
@@ -96,6 +103,36 @@ export function createHandler({ config, auth, libraries, version }) {
       return send(res, 200, bookDto(other, series, lib));
     }
 
+    // ── Contenus : liste des pages, page, couverture ──
+    if (get && (m = /^\/api\/v1\/books\/([^/]+)\/pages(?:\/([^/]+))?$/.exec(path))) {
+      if (!isBookId(m[1]) || (m[2] !== undefined && !PAGE_NUMBER.test(m[2]))) throw new NotFound('identifiant inconnu');
+      const { lib, series, chapter } = await libraries.getBook(m[1]);
+      return libraries.guard(m[1], async () => {
+        const target = await libraries.target(lib, series, chapter);
+        if (m[2] === undefined) {
+          const pages = await reading.pages(target);
+          if (chapter.kind === 'archive') libraries.rememberPages(chapter, pages.length);
+          return send(res, 200, pages);
+        }
+        const source = await reading.source(target, Number(m[2]));
+        if (!source) throw new NotFound('page introuvable');
+        if (source.pageCount !== undefined) libraries.rememberPages(chapter, source.pageCount);
+        return serve(req, res, source);
+      });
+    }
+    // Couverture : une seule image par série. Celle d'un chapitre est celle de sa série (§4.5).
+    if (get && (m = /^\/api\/v1\/(series|books)\/([^/]+)\/thumbnail$/.exec(path))) {
+      if (!(m[1] === 'series' ? isSeriesId(m[2]) : isBookId(m[2]))) throw new NotFound('identifiant inconnu');
+      const { lib, series } = m[1] === 'series' ? await libraries.getSeries(m[2]) : await libraries.getBook(m[2]);
+      return libraries.guard(series.id, async () => {
+        const file = await libraries.coverFile(lib, series);
+        const source = file ? await reading.fileSource(file)
+          : await reading.source(await libraries.target(lib, series, series.chapters[0]), 1); // sinon : première page du premier chapitre
+        if (!source) throw new NotFound('pas de couverture');
+        return serve(req, res, source);
+      });
+    }
+
     if (path === '/api/v1/scan' && get) return send(res, 200, libraries.status());
     if (path === '/api/v1/scan' && req.method === 'POST') {
       await readJson(req);
@@ -112,6 +149,7 @@ export function createHandler({ config, auth, libraries, version }) {
       checkCrossOrigin(req);
       await route(req, res, new URL(req.url, 'http://x'));
     } catch (e) {
+      if (res.headersSent) return res.destroy(); // erreur en cours de flux : on ne peut plus changer le statut
       if (e instanceof HttpError) return send(res, e.status, { error: e.message });
       if (e instanceof NotFound) return send(res, 404, { error: 'not found' });
       if (e instanceof Unavailable) return send(res, 503, { error: 'library unavailable' }, { 'Retry-After': '5' });

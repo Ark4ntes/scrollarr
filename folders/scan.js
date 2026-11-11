@@ -4,7 +4,7 @@
 // bruts du système de fichiers ; ils ne quittent pas le service (voir ids.js).
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { isIgnoredName, isImageName, isArchiveName, isCoverName, displayName, stripExtension } from './naming.js';
+import { isIgnoredName, isImageName, isArchiveName, isCoverName, displayName, stripExtension, compareNames } from './naming.js';
 
 export const MAX_DEPTH = 3;
 
@@ -73,8 +73,10 @@ export async function scanSeries(root, series) {
       else if (e.isFile() && isArchiveName(e.name)) archives.push(e.name);
       else if (e.isFile() && isImageName(e.name)) images.push(e.name);
     }
-    if (depth === 0) { looseImages = images.filter((n) => !isCoverName(n)).length; }
-    else if (images.length > 0) {
+    if (depth === 0) {
+      looseImages = images.filter((n) => !isCoverName(n)).length;
+      out.cover = images.filter(isCoverName).sort(compareNames)[0] ?? null; // cover.jpg/.jpeg/.png/.webp à la racine de la série
+    } else if (images.length > 0) {
       // Un dossier qui contient directement des images est un chapitre ; on ne descend pas plus bas.
       const s = await fs.lstat(join(root, rel));
       out.chapters.push({ rel, kind: 'dir', name: displayName(rel.split('/').pop()), parents, pages: images.length, size: null, ...times(s) });

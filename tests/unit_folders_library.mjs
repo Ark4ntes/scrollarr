@@ -182,10 +182,15 @@ test('search and sort: title ascending/descending, by date, pages', async () => 
 
 test('the code that touches libraries never writes (static check)', () => {
   const WRITES = /\b(writeFile|appendFile|createWriteStream|unlink|rmdir|rmSync|rm|mkdir|rename|copyFile|truncate|chmod|chown|symlink|link|utimes|open)\s*\(/;
-  for (const file of ['scan.js', 'library.js', 'ids.js', 'routes.js', 'naming.js']) {
-    const source = readFileSync(new URL(`../folders/${file}`, import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
-    assert.ok(!WRITES.test(source), `${file} contient un appel d'écriture`);
+  const code = (file) => readFileSync(new URL(`../folders/${file}`, import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
+  for (const file of ['scan.js', 'library.js', 'ids.js', 'routes.js', 'naming.js', 'archive.js', 'reading.js', 'sniff.js', 'http.js']) {
+    assert.ok(!WRITES.test(code(file)), `${file} contient un appel d'écriture`);
   }
+  // Seul point d'ouverture de fichier de lecture : en lecture seule, sans suivre de lien (le motif ci-dessus ne voit pas l'alias).
+  const opens = readdirSync(new URL('../folders/', import.meta.url)).filter((f) => f.endsWith('.js')).flatMap((f) => (code(f).match(/\b(?:fsOpen|openFile)\s*\(/g) || []).map(() => f));
+  assert.deepEqual(opens, ['archive.js']);
+  assert.match(code('archive.js'), /openFile\(path, constants\.O_RDONLY \| constants\.O_NOFOLLOW\)/);
+  assert.ok(!/\b(?:writeFile|createWriteStream|mkdtemp|tmpdir)\b/.test(code('archive.js') + code('reading.js'))); // aucun fichier temporaire
   assert.ok(readdirSync(new URL('../folders/', import.meta.url)).includes('store.js')); // seul store.js écrit, dans /data
 });
 

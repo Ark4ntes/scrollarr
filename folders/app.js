@@ -7,6 +7,7 @@ import { readConfig, checkFilesystem } from './config.js';
 import { loadSecret, createFlags } from './store.js';
 import { createAuth } from './auth.js';
 import { createLibraries } from './library.js';
+import { createReading } from './reading.js';
 import { createHandler } from './routes.js';
 
 /** Démarre le service ; lève ConfigError si la configuration est invalide. `overrides` : réglages des tests. */
@@ -17,12 +18,13 @@ export async function start(env, overrides = {}) {
   const auth = createAuth(config, await loadSecret(config.dataDir));
   const flags = await createFlags(config.dataDir).load();
   const log = config.log || console; // les tests passent un journal muet
-  const libraries = createLibraries({ config, mounts, flags, log });
+  const reading = createReading();
+  const libraries = createLibraries({ config, mounts, flags, log, onScan: reading.clear });
 
   if (config.auth === 'none') {
     log.warn('ATTENTION : FOLDERS_AUTH=none, aucun contrôle d\'accès. Réservé à un réseau local de confiance ou à un VPN.');
   }
-  const server = http.createServer(createHandler({ config, auth, libraries, version }));
+  const server = http.createServer(createHandler({ config, auth, libraries, reading, version }));
   server.requestTimeout = 30000;
   server.maxConnections = 128;
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(config.port, resolve); });

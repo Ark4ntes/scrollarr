@@ -63,3 +63,30 @@ export function request(app, method, path, { headers = {}, body } = {}) {
 export const JSON_POST = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
 export const get = (app, path, headers) => request(app, 'GET', path, { headers });
 export const post = (app, path, body = {}, headers = {}) => request(app, 'POST', path, { headers: { ...JSON_POST, ...headers }, body });
+
+// ── Contenus (étape B) ──
+import { readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+
+/** Écrit un fichier (dossiers parents créés) et rend son chemin. */
+export function put(root, rel, data) {
+  const file = join(root, rel);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, data);
+  return file;
+}
+/** Concatène le corps d'une source de page (résultat de `source.stream()`). */
+export async function readBody({ body }) {
+  const chunks = [];
+  for await (const c of body) chunks.push(c);
+  return Buffer.concat(chunks);
+}
+/** Empreinte d'un dossier : noms, tailles, dates. Sert à prouver qu'on n'y a rien écrit. */
+export function snapshot(dir) {
+  return JSON.stringify(readdirSync(dir).sort().map((n) => { const s = statSync(join(dir, n)); return [n, s.size, s.mtimeMs, s.ino]; }));
+}
+/** Descripteurs ouverts par ce processus (Linux) ; null ailleurs. */
+export function openFds() {
+  try { return readdirSync('/proc/self/fd').length; } catch { return null; }
+}
+export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

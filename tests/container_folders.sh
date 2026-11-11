@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Test du conteneur folders (READ-002 §4.11, étape A) : image construite, démarrage
-# avec montage :ro et système de fichiers en lecture seule, écriture refusée,
-# /health, refus de démarrer sans mode d'authentification, bibliothèque inchangée.
+# Test du conteneur folders (READ-002 §4.11, étapes A et B) : image construite
+# (dépendances installées par « npm ci »), démarrage avec montage :ro et système de
+# fichiers en lecture seule, écriture refusée, /health, refus de démarrer sans mode
+# d'authentification, lecture d'une page d'archive, d'une page de dossier et d'une
+# couverture dans ce conteneur durci (sans rien écrire dans /tmp ni /data), bibliothèque inchangée.
 # Nécessite Docker. Lancer avec : tests/container_folders.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -47,6 +49,30 @@ check "write to / is refused" bash -c "! docker exec '$name' sh -c 'touch /intru
 check "data volume is writable" docker exec "$name" sh -c 'test -s /data/secret.key'
 check "runs as the requested non-root user" bash -c "[ \"\$(docker exec '$name' id -u)\" = '$(id -u)' ] && [ '$(id -u)' != 0 ]"
 
-# 4. La bibliothèque n'a pas bougé.
+# 4. Lecture dans le conteneur durci : le module de lecture des archives est bien installé et rien n'est écrit.
+reading() { docker exec "$name" node --input-type=module -e "
+const base = 'http://127.0.0.1:8788', h = { 'Content-Type': 'application/json', 'X-Requested-With': 'check' };
+const login = await fetch(base + '/api/v1/login', { method: 'POST', headers: h, body: JSON.stringify({ username: 'essai', password: 'mot-de-passe-d-essai' }) });
+const cookie = login.headers.get('set-cookie').split(';')[0];
+const api = (p, x = {}) => fetch(base + p, { headers: { Cookie: cookie, ...x } });
+const find = async (n) => (await (await api('/api/v1/series?search=' + encodeURIComponent(n))).json()).content.find((s) => s.name === n);
+const books = async (s) => (await (await api('/api/v1/series/' + s.id + '/books')).json()).content;
+const check = (ok, what) => { if (!ok) { console.error('FAIL ' + what); process.exit(1); } };
+const alpha = await find('Alpha Quest'), beta = await find('Beta Folders');
+const archive = (await books(alpha))[0], folder = (await books(beta))[0];
+for (const [label, book] of [['archive', archive], ['folder', folder]]) {
+  const page = await api('/api/v1/books/' + book.id + '/pages/1');
+  check(page.status === 200 && page.headers.get('content-type') === 'image/png' && (await page.arrayBuffer()).byteLength > 0, label + ' page');
+  const again = await api('/api/v1/books/' + book.id + '/pages/1', { 'If-None-Match': page.headers.get('etag') });
+  check(again.status === 304, label + ' revalidation');
+}
+check((await api('/api/v1/series/' + alpha.id + '/thumbnail')).status === 200, 'series cover');
+check((await api('/api/v1/books/' + archive.id + '/pages/99')).status === 404, 'page out of range');
+"; }
+check "reads an archive page, a folder page, a cover and revalidates (304)" reading
+check "nothing written to /tmp" docker exec "$name" sh -c 'test -z "$(ls -A /tmp)"'
+check "only secret.key and libraries.json in /data" bash -c "[ \"\$(docker exec '$name' ls -A /data | grep -v -x -e secret.key -e libraries.json | wc -l)\" = 0 ]"
+
+# 5. La bibliothèque n'a pas bougé.
 check "library fingerprint unchanged" test "$before" = "$(fingerprint "$lib")"
 echo "ALL PASS"

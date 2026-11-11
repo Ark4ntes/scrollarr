@@ -1,4 +1,7 @@
-// Réponses JSON, lecture du corps et garde-fous inter-origines (READ-002 §4.10).
+// Réponses JSON ou image, lecture du corps et garde-fous inter-origines (READ-002 §4.10).
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
 export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -17,6 +20,34 @@ export function send(res, status, body, headers = {}) {
   const payload = status === 204 ? '' : JSON.stringify(body ?? {});
   res.writeHead(status, { ...COMMON, 'Content-Type': 'application/json; charset=utf-8', ...headers });
   res.end(payload);
+}
+
+// ── Images ──
+// Validateurs calculés sur les quatre éléments d'une version de fichier (§4.8) ; `no-cache` impose la
+// revalidation à chaque affichage, donc un 304 sans corps quand rien n'a changé. `private` : la page
+// est derrière une session.
+const IMAGE_CACHE = 'private, no-cache';
+const IDLE_MS = 60000; // un client qui ne lit plus est coupé, pour libérer le fichier
+const validators = ({ etag, mtimeMs }) => ({ 'Cache-Control': IMAGE_CACHE, ETag: etag, 'Last-Modified': new Date(mtimeMs).toUTCString() });
+
+/** Le client a-t-il déjà la bonne version ? If-None-Match l'emporte sur If-Modified-Since (RFC 9110, 13.1). */
+export function notModified(req, { etag, mtimeMs }) {
+  const none = req.headers['if-none-match'];
+  if (none !== undefined) return none.trim() === '*' || none.split(',').some((t) => t.trim().replace(/^W\//, '') === etag);
+  const since = Date.parse(req.headers['if-modified-since'] ?? '');
+  return !Number.isNaN(since) && Math.floor(mtimeMs / 1000) * 1000 <= since;
+}
+
+export function sendNotModified(res, source) {
+  res.writeHead(304, { ...COMMON, ...validators(source) });
+  res.end();
+}
+
+/** Envoie l'image en flux. Une erreur en cours de route coupe la connexion : le corps est plus court que Content-Length. */
+export async function sendImage(res, source, { mediaType, body }) {
+  res.writeHead(200, { ...COMMON, ...validators(source), 'Content-Type': mediaType, 'Content-Length': String(source.size) });
+  res.setTimeout(IDLE_MS, () => res.destroy());
+  await pipeline(Readable.from(body), res).catch(() => {}); // pipeline détruit la réponse et ferme le fichier
 }
 
 /** Corps JSON (objet), 64 Ko au plus. Un corps vide donne {}. */

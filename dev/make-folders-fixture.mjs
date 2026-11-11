@@ -8,7 +8,7 @@
 //   FOLDERS_AUTH=none FOLDERS_LIBRARIES_DIR=<dossier>/libraries FOLDERS_DATA_DIR=<dossier>/data node folders/server.js
 import { mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { deflateSync, crc32 } from 'node:zlib';
+import { deflateSync, deflateRawSync, crc32 } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 /** PNG 1×1 d'une couleur donnée. */
@@ -24,24 +24,60 @@ export function png(r = 200, g = 80, b = 80) {
     chunk('IDAT', deflateSync(Buffer.from([0, r, g, b]))), chunk('IEND', Buffer.alloc(0))]);
 }
 
-/** Archive ZIP (entrées stockées, sans compression) à partir de { nom: Buffer }. */
-export function zip(files) {
-  const locals = [], central = [];
+/**
+ * Disposition d'une archive ZIP : [{ at, data }] et taille totale. `files` : { nom: contenu } ou [[nom, contenu]…]
+ * (une liste permet deux entrées de même nom). Un contenu est un Buffer ou un objet qui peut mentir ou casser exprès :
+ *   data, method (0 stocké, 8 deflate), flags (bit 0 : chiffré), raw (octets déjà « compressés »), crc, usize, csize,
+ *   comment (commentaire de l'entrée), gap (trou de N octets avant l'entrée : fichier creux, pour les décalages ZIP64).
+ * Options : zip64 (tailles et décalages dans l'extra ZIP64, enregistrement ZIP64 de fin), comment (archive).
+ */
+export function zipLayout(files, { zip64 = false, comment = '' } = {}) {
+  const items = Array.isArray(files) ? files : Object.entries(files);
+  const segments = [], central = [];
   let offset = 0;
-  for (const [name, data] of Object.entries(files)) {
-    const nameBuf = Buffer.from(name);
-    const crc = crc32(data);
-    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4);
-    local.writeUInt32LE(crc, 14); local.writeUInt32LE(data.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(nameBuf.length, 26);
-    const head = Buffer.alloc(46); head.writeUInt32LE(0x02014b50, 0); head.writeUInt16LE(20, 4); head.writeUInt16LE(20, 6);
-    head.writeUInt32LE(crc, 16); head.writeUInt32LE(data.length, 20); head.writeUInt32LE(data.length, 24); head.writeUInt16LE(nameBuf.length, 28); head.writeUInt32LE(offset, 42);
-    locals.push(local, nameBuf, data); central.push(head, nameBuf);
-    offset += 30 + nameBuf.length + data.length;
+  for (const [name, spec] of items) {
+    const o = Buffer.isBuffer(spec) || typeof spec === 'string' ? { data: Buffer.from(spec) } : spec;
+    const data = o.data ?? Buffer.alloc(0);
+    const method = o.method ?? 0, flags = o.flags ?? 0;
+    const body = o.raw ?? (method === 8 ? deflateRawSync(data) : data);
+    const nameBuf = Buffer.from(name), commentBuf = Buffer.from(o.comment ?? '');
+    const crc = o.crc ?? crc32(data), usize = o.usize ?? data.length, csize = o.csize ?? body.length;
+    offset += o.gap ?? 0;
+    const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(flags, 6); local.writeUInt16LE(method, 8);
+    local.writeUInt32LE(crc, 14); local.writeUInt32LE(csize, 18); local.writeUInt32LE(usize, 22); local.writeUInt16LE(nameBuf.length, 26);
+    const extra = Buffer.alloc(zip64 ? 28 : 0);
+    if (zip64) { extra.writeUInt16LE(1, 0); extra.writeUInt16LE(24, 2); extra.writeBigUInt64LE(BigInt(usize), 4); extra.writeBigUInt64LE(BigInt(csize), 12); extra.writeBigUInt64LE(BigInt(offset), 20); }
+    const head = Buffer.alloc(46); head.writeUInt32LE(0x02014b50, 0); head.writeUInt16LE(zip64 ? 45 : 20, 4); head.writeUInt16LE(zip64 ? 45 : 20, 6);
+    head.writeUInt16LE(flags, 8); head.writeUInt16LE(method, 10); head.writeUInt32LE(crc, 16);
+    head.writeUInt32LE(zip64 ? 0xffffffff : csize, 20); head.writeUInt32LE(zip64 ? 0xffffffff : usize, 24);
+    head.writeUInt16LE(nameBuf.length, 28); head.writeUInt16LE(extra.length, 30); head.writeUInt16LE(commentBuf.length, 32);
+    head.writeUInt32LE(zip64 ? 0xffffffff : offset, 42);
+    segments.push({ at: offset, data: Buffer.concat([local, nameBuf, body]) });
+    central.push(head, nameBuf, extra, commentBuf);
+    offset += 30 + nameBuf.length + body.length;
   }
   const dir = Buffer.concat(central);
+  const tail = [dir];
+  if (zip64) {
+    const eocd64 = Buffer.alloc(56); eocd64.writeUInt32LE(0x06064b50, 0); eocd64.writeBigUInt64LE(44n, 4); eocd64.writeUInt16LE(45, 12); eocd64.writeUInt16LE(45, 14);
+    eocd64.writeBigUInt64LE(BigInt(items.length), 24); eocd64.writeBigUInt64LE(BigInt(items.length), 32); eocd64.writeBigUInt64LE(BigInt(dir.length), 40); eocd64.writeBigUInt64LE(BigInt(offset), 48);
+    const locator = Buffer.alloc(20); locator.writeUInt32LE(0x07064b50, 0); locator.writeBigUInt64LE(BigInt(offset + dir.length), 8); locator.writeUInt32LE(1, 16);
+    tail.push(eocd64, locator);
+  }
+  const commentBuf = Buffer.from(comment);
   const end = Buffer.alloc(22); end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(central.length / 2, 8); end.writeUInt16LE(central.length / 2, 10); end.writeUInt32LE(dir.length, 12); end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, dir, end]);
+  end.writeUInt16LE(zip64 ? 0xffff : items.length, 8); end.writeUInt16LE(zip64 ? 0xffff : items.length, 10);
+  end.writeUInt32LE(zip64 ? 0xffffffff : dir.length, 12); end.writeUInt32LE(zip64 ? 0xffffffff : offset, 16); end.writeUInt16LE(commentBuf.length, 20);
+  tail.push(end, commentBuf);
+  const rest = Buffer.concat(tail);
+  segments.push({ at: offset, data: rest });
+  return { segments, size: offset + rest.length };
+}
+
+/** Archive ZIP en mémoire (voir zipLayout). Par défaut : entrées stockées, sans compression. */
+export function zip(files, options) {
+  const { segments } = zipLayout(files, options);
+  return Buffer.concat(segments.map((s) => s.data)); // sans « gap », les segments se suivent
 }
 
 export function makeFixture(out, { bulk = 0 } = {}) {

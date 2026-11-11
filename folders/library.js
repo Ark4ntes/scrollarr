@@ -4,13 +4,17 @@
 // ou vide alors qu'elle a déjà contenu des séries, devient « indisponible » :
 // les routes répondent 503, jamais 404 (un 404 ferait supprimer l'abonnement).
 import { listRoot, scanSeries, mapLimit } from './scan.js';
-import { libraryId, seriesId, bookId, seriesOfBook, createRegistry, confine } from './ids.js';
+import { libraryId, seriesId, bookId, seriesOfBook, createRegistry, confine, confineFile, ConfinementError, isBookId } from './ids.js';
 import { compareSegments, compareNames, detectNumber, numberSorts, searchKey } from './naming.js';
 
 export class Unavailable extends Error {}
 export class NotFound extends Error {}
 
-export function createLibraries({ config, mounts, flags, log = console }) {
+/** Erreur du système de fichiers (EIO, EACCES…), par opposition à une erreur de format. */
+const isFsError = (e) => typeof e?.code === 'string' && /^E[A-Z0-9]+$/.test(e.code);
+
+/** `onScan` : appelé à chaque parcours complet (les listes d'entrées d'archives sont alors jetées, §4.8). */
+export function createLibraries({ config, mounts, flags, log = console, onScan = () => {} }) {
   const now = () => Date.now();
   const placeholder = (m) => ({ name: m.name, id: libraryId(m.name), root: m.root, state: 'scanning', listedAt: 0, series: new Map(), warnings: [], pending: null });
   let libs = new Map(mounts.map((m) => [m.name, placeholder(m)]));
@@ -18,6 +22,9 @@ export function createLibraries({ config, mounts, flags, log = console }) {
   let initial = null; // parcours de démarrage
   let running = null; // parcours complet en cours
   let lastScan = null;
+  // Nombre de pages des archives déjà ouvertes (lecture du répertoire central) : sans cela il reviendrait à
+  // `null` à chaque relecture de la série. Valable tant que la taille et la date de l'archive ne changent pas.
+  const knownPages = new Map();
 
   // ── Construction d'une série à partir d'un parcours ──
   function makeSeries(lib, entry, scanned, reg) {
@@ -35,7 +42,7 @@ export function createLibraries({ config, mounts, flags, log = console }) {
       const chapter = {
         id, kind: c.kind, name: c.name, title: c.segments.join(' / '),
         number: i + 1, numberText: number === null ? '' : String(number), numberSort: sorts[i],
-        pages: c.pages, size: c.size, created: c.birthtimeMs, lastModified: c.mtimeMs,
+        pages: c.pages ?? rememberedPages(id, c), size: c.size, created: c.birthtimeMs, lastModified: c.mtimeMs,
       };
       chapters.push(chapter);
       byId.set(id, chapter);
@@ -43,10 +50,14 @@ export function createLibraries({ config, mounts, flags, log = console }) {
     });
     reg.add(sid, lib.name, entry.rel);
     return {
-      id: sid, kind: entry.kind, title: entry.title, chapters, byId, scannedAt: now(),
+      id: sid, kind: entry.kind, title: entry.title, cover: scanned.cover ?? null, chapters, byId, scannedAt: now(),
       created: scanned.birthtimeMs, lastModified: Math.max(scanned.mtimeMs, ...chapters.map((c) => c.lastModified)),
       warnings: scanned.warnings,
     };
+  }
+  function rememberedPages(id, c) {
+    const known = knownPages.get(id);
+    return known && known.size === c.size && known.mtimeMs === c.mtimeMs ? known.count : null;
   }
   function dropSeries(lib, sid, reg = registry) {
     const s = lib.series.get(sid);
@@ -116,6 +127,7 @@ export function createLibraries({ config, mounts, flags, log = console }) {
         fresh.set(m.name, lib);
       }
       libs = fresh; registry = reg;
+      onScan();
       lastScan = { startedAt, finishedAt: now() };
       const t = totals();
       log.log(`Parcours terminé : ${t.series} séries, ${t.books} chapitres, ${t.warningsCount} avertissements, ${lastScan.finishedAt - startedAt} ms.`);
@@ -179,9 +191,45 @@ export function createLibraries({ config, mounts, flags, log = console }) {
     return { series, fresh: true };
   }
 
+  // ── Lecture des contenus (étape B) : où lire, et que faire quand le fichier a changé ──
+  /** Ce qu'il faut lire pour un chapitre : { kind, path (chemin réel confiné), skipCover }. Lève l'erreur du système si le fichier a disparu. */
+  async function target(lib, series, chapter) {
+    const loc = registry.locate(chapter.id);
+    const path = await (chapter.kind === 'archive' ? confineFile : confine)(lib.root, loc.rel);
+    // Images directement dans le dossier de la série : cover.* n'est pas une page.
+    return { kind: chapter.kind, path, skipCover: chapter.kind === 'dir' && loc.rel === registry.locate(series.id).rel };
+  }
+  /**
+   * Exécute une lecture sur `id` (série ou chapitre). Fichier disparu ou remplacé par un lien : la série est
+   * relue tout de suite, puis 404. Autre erreur du système de fichiers : 503, jamais 404 (§4.8).
+   */
+  async function guard(id, work) {
+    try { return await work(); } catch (e) {
+      if (e?.code === 'ENOENT' || e?.code === 'ENOTDIR' || e?.code === 'ELOOP' || e instanceof ConfinementError) {
+        const sid = isBookId(id) ? seriesOfBook(id) : id;
+        await refreshSeries(await libraryOfSeries(sid), sid, true); // lève Unavailable ou NotFound s'il y a lieu
+        throw new NotFound('introuvable');
+      }
+      if (isFsError(e)) throw new Unavailable('fichier illisible');
+      throw e;
+    }
+  }
+
   return {
     start,
     scanAll,
+    target,
+    guard,
+    /** Mémorise le nombre de pages d'une archive (connu après son ouverture). */
+    rememberPages(chapter, count) {
+      chapter.pages = count;
+      knownPages.set(chapter.id, { size: chapter.size, mtimeMs: chapter.lastModified, count });
+      if (knownPages.size > 20000) knownPages.delete(knownPages.keys().next().value);
+    },
+    /** Fichier de couverture d'une série (cover.*), ou null : alors c'est la première page du premier chapitre. */
+    async coverFile(lib, series) {
+      return series.cover ? confineFile(lib.root, `${registry.locate(series.id).rel}/${series.cover}`) : null;
+    },
     maybeBackgroundScan,
     libraries: () => [...libs.values()].map((l) => ({ id: l.id, name: l.name })).sort((a, b) => compareNames(a.name, b.name)),
     health: () => [...libs.values()].map((l) => ({ name: l.name, state: l.state })),
