@@ -4,8 +4,8 @@ LABEL org.opencontainers.image.title="Scrollarr notifier" \
       org.opencontainers.image.source="https://github.com/Ark4ntes/scrollarr" \
       org.opencontainers.image.licenses="MIT"
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 COPY server.js ./
 ENV DATA_DIR=/data PORT=8787
 VOLUME /data
