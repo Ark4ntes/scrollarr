@@ -29,6 +29,8 @@ export const CAP = Object.freeze({
   COLLECT_TASKS: 'collect.tasks',
   /** Annuler une tâche (méthode `cancelTask`). */
   COLLECT_CANCEL: 'collect.cancel',
+  /** Relancer une tâche en échec ou annulée (méthode `retryTask`). */
+  COLLECT_RETRY: 'collect.retry',
 });
 
 /**

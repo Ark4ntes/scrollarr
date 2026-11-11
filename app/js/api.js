@@ -417,7 +417,20 @@ function toTask(k, raw) {
 /** Vrai si au moins un collecteur utilisable sait déclarer ses tâches. */
 export const canTrackTasks = () => trackers().length > 0;
 /** Tâches connues de cet appareil : en cours d'abord, puis les dernières terminées. */
-export const tasks = () => taskList.map((task) => ({ ...task, collectorLabel: collectorLabel(task.collector) }));
+export const tasks = () => taskList.map((task) => ({
+  ...task,
+  collectorLabel: collectorLabel(task.collector),
+  retryable: (task.state === 'failed' || task.state === 'cancelled') && collectorCan(task.collector, CAP.COLLECT_RETRY),
+}));
+const collectorCan = (id, cap) => { const k = collectors.find((x) => x.id === id); return !!k && k.capabilities.includes(cap) && collectorUsable(k); };
+/** Nombre de tâches en attente ou en cours, pour le résumé affiché dans les réglages. */
+export const activeTaskCount = () => taskList.filter(tasksModel.isActive).length;
+
+/** Collecteurs de cette installation, pour l'écran de réglages. */
+export const collectorList = () => collectors.map((k) => ({
+  id: k.id, label: k.label, usable: collectorUsable(k), capabilities: k.capabilities,
+  session: typeof k.session === 'string' ? servers.find((s) => s.c.id === k.session)?.c.label || k.session : null,
+}));
 
 /** Interroge les collecteurs et met la liste à jour. Un collecteur qui ne répond pas garde ses tâches en l'état. */
 export async function refreshTasks() {
@@ -443,6 +456,23 @@ export async function cancelTask(id) {
   if (!k || !task.cancellable || !k.capabilities.includes(CAP.COLLECT_CANCEL)) throw new Error('Annulation impossible');
   await k.cancelTask(task.nativeId);
   setTasks(tasksModel.cancelled(taskList, id));
+}
+
+/** Relance une tâche en échec ou annulée, si son collecteur le permet. */
+export async function retryTask(id) {
+  const task = taskList.find((x) => x.id === id);
+  const k = task && collectors.find((x) => x.id === task.collector);
+  if (!k || tasksModel.isActive(task) || !collectorCan(task.collector, CAP.COLLECT_RETRY)) throw new Error('Relance impossible');
+  await k.retryTask(task.nativeId);
+  await refreshTasks();
+}
+
+/** Vide l'historique. Les échecs que le collecteur garde dans sa file en sont retirés, sinon ils reviendraient. */
+export async function clearTaskHistory() {
+  for (const task of taskList.filter((x) => x.state === 'failed')) {
+    if (collectorCan(task.collector, CAP.COLLECT_CANCEL)) await collectors.find((k) => k.id === task.collector).cancelTask(task.nativeId).catch(() => {});
+  }
+  setTasks(taskList.filter(tasksModel.isActive));
 }
 
 // ───────────── Réglages conservés sur les serveurs ─────────────

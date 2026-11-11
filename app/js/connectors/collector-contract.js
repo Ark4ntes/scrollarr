@@ -29,6 +29,8 @@
 //                      (terminées, annulées ailleurs…), sous la même forme. Un collecteur
 //                      qui garde son historique peut renvoyer une liste vide.
 //   collect.cancel   → cancelTask(nativeId)
+//   collect.retry    → retryTask(nativeId)
+//                      relance une tâche en échec ou annulée ; elle réapparaît ensuite dans tasks().
 import { CAP, check } from './contract.js';
 
 const ALWAYS = ['id', 'label', 'capabilities', 'serves'];
@@ -37,8 +39,9 @@ const WHEN = {
   [CAP.COLLECT_CHAPTERS]: ['collectChapters'],
   [CAP.COLLECT_TASKS]: ['tasks', 'resolveTasks'],
   [CAP.COLLECT_CANCEL]: ['cancelTask'],
+  [CAP.COLLECT_RETRY]: ['retryTask'],
 };
-const ALLOWED = [CAP.COLLECT_CHAPTERS, CAP.COLLECT_TASKS, CAP.COLLECT_CANCEL];
+const ALLOWED = [CAP.COLLECT_CHAPTERS, CAP.COLLECT_TASKS, CAP.COLLECT_CANCEL, CAP.COLLECT_RETRY];
 
 /** Vérifie qu'un collecteur respecte le contrat et le renvoie. `readerIds` : lecteurs connus. */
 export function validateCollector(collector, readerIds = []) {
@@ -47,8 +50,8 @@ export function validateCollector(collector, readerIds = []) {
   if (!Array.isArray(collector.serves)) throw new Error(`${name} : « serves » doit être une liste`);
   const unknown = [...collector.serves, ...(typeof collector.session === 'string' ? [collector.session] : [])].filter((id) => !readerIds.includes(id));
   if (unknown.length) throw new Error(`${name} : lecteur inconnu « ${unknown.join(', ')} »`);
-  if (collector.capabilities.includes(CAP.COLLECT_CANCEL) && !collector.capabilities.includes(CAP.COLLECT_TASKS)) {
-    throw new Error(`${name} : « collect.cancel » demande « collect.tasks »`);
+  for (const cap of [CAP.COLLECT_CANCEL, CAP.COLLECT_RETRY]) {
+    if (collector.capabilities.includes(cap) && !collector.capabilities.includes(CAP.COLLECT_TASKS)) throw new Error(`${name} : « ${cap} » demande « collect.tasks »`);
   }
   if (collector.capabilities.includes(CAP.COLLECT_CHAPTERS) && !collector.serves.length) {
     throw new Error(`${name} : « collect.chapters » demande au moins un lecteur dans « serves »`);

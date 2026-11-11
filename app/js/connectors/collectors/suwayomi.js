@@ -22,7 +22,7 @@ export function createSuwayomiCollector({ base }) {
   return {
     id: 'suwayomi',
     label: 'Suwayomi',
-    capabilities: [CAP.COLLECT_CHAPTERS, CAP.COLLECT_TASKS, CAP.COLLECT_CANCEL],
+    capabilities: [CAP.COLLECT_CHAPTERS, CAP.COLLECT_TASKS, CAP.COLLECT_CANCEL, CAP.COLLECT_RETRY],
     serves: ['suwayomi'],
     session: 'suwayomi',
 
@@ -59,6 +59,12 @@ export function createSuwayomiCollector({ base }) {
 
     async cancelTask(nativeId) {
       await client.gql('Dequeue', { ids: [Number(nativeId)] });
+    },
+
+    /** Un téléchargement en échec reste dans la file de Suwayomi : on l'en retire avant de le redemander. */
+    async retryTask(nativeId) {
+      await client.gql('Dequeue', { ids: [Number(nativeId)] });
+      await client.gql('Enqueue', { ids: [Number(nativeId)] });
     },
   };
 }

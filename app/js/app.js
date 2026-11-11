@@ -16,12 +16,14 @@ import { my } from './views/my.js';
 import { more } from './views/more.js';
 import { login } from './views/login.js';
 import { profilesView } from './views/profiles.js';
+import { collect } from './views/collect.js';
 
 const routes = [
   { re: /^\/home$/, view: home, tab: 'home' },
   { re: /^\/library$/, view: library, tab: 'library' },
   { re: /^\/my(?:\/(recent|subscriptions|downloads))?$/, view: my, tab: 'my', params: ['tab'] },
   { re: /^\/more$/, view: more, tab: 'more' },
+  { re: /^\/more\/downloads$/, view: collect, tab: 'more' },
   { re: /^\/search$/, view: search },
   { re: /^\/series\/([^/]+)$/, view: series, params: ['id'] },
   { re: /^\/read\/([^/]+)$/, view: reader, params: ['id'], reading: true },

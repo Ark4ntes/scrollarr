@@ -5,26 +5,30 @@
 > Vision : lecteur manga/comics auto-hébergé, multi-serveurs, avec
 > collecte intégrée et applications iOS/Android.
 
-## État d'avancement (10 novembre 2026, version 0.3.1)
+## État d'avancement (11 novembre 2026, version 0.7.0)
 
 Ce document décrit une cible. Voici où en est réellement le dépôt.
 
 | Item | État | Détail |
 | --- | --- | --- |
-| CONN-006 | Fait | Une panne d'un serveur ne bloque pas les autres (listes fusionnées tolérantes aux échecs) |
-| CONN-005 | Fait en partie | Activation, désactivation, priorité et état par serveur ; il manque un bouton « tester » |
-| QA-002 | Fait | Faux serveurs Suwayomi et Komga dans `dev/`, démarrage en une commande |
-| DOC-002 | Fait | Section « Writing a connector » du README |
+| CONN-001, CONN-002 | Fait | Contrats séparés pour les lecteurs et les collecteurs, capacités déclarées et vérifiées au démarrage |
+| CONN-005 | Fait | Activation, désactivation, priorité, état et bouton « Tester » par serveur |
+| CONN-006 | Fait | Une panne d'un serveur ne bloque pas les autres |
+| SYNC-001, SYNC-002 | Fait | Fusion entrée par entrée avec révision et identifiant d'appareil (progression, historique, abonnements) |
+| QA-001, QA-002, DEV-001 | Fait | Tests de bout en bout et unitaires exécutés par GitHub Actions ; faux serveurs dans `dev/` |
+| DEV-002, OPS-002 | Fait | Image Docker et contrôles de santé |
+| DOC-002, DOC-003, SEC-001 | Fait | Documentation des connecteurs, fichiers de contribution et de sécurité |
+| COL-001 | Fait en partie | Contrat des collecteurs : téléchargement de chapitres connus d'un lecteur, tâches, annulation, relance. Il manque la recherche et le suivi d'une série |
+| COL-002 | Fait en partie | Collecteur Suwayomi : téléchargement et file d'attente. Pas de recherche chez les sources |
+| JOB-001 | Fait en partie | Les tâches suivies survivent au rechargement, par appareil. La file elle-même reste celle du collecteur |
+| JOB-002, JOB-004, JOB-005 | Fait | Modèle commun des tâches, états et historique, annulation, écran de suivi ouvert depuis les réglages |
+| JOB-003 | Fait en partie | Relance manuelle ; pas de relance automatique avec délai croissant |
 | LIB-001 | Fait en partie | Limite documentée : les doublons sont reconnus par leur titre uniquement |
 | AUTH-004 | Sans objet pour l'instant | Les adresses des serveurs viennent de l'environnement, jamais d'une saisie utilisateur |
-| QA-001, DEV-001 | En cours | Branche `feature/QA-001-tests-ci` |
-| DEV-002, OPS-002 | En cours | Branche `feature/DEV-002-docker-image` |
-| CONN-001, CONN-002, SYNC-001 | En cours | Branche `feature/CONN-002-capabilities` |
-| DOC-003, SEC-001 | En cours | Branche `docs/DOC-003-repo-hygiene` |
 
-Tous les autres items sont à faire. Les phases 3 à 6 (collecte, file de tâches, comptes, applications mobiles) dépendent de la décision « backend léger » de la section 10 : l'application actuelle fonctionne sans backend, avec un simple nginx.
+Tous les autres items sont à faire. Les phases 4 à 6 (bibliothèque universelle, comptes, applications mobiles) dépendent de la décision « backend léger » de la section 10 : l'application actuelle fonctionne sans backend, avec un simple nginx.
 
-Les numéros de version des jalons (v1.1, v1.2…) sont ceux de la cible ; le dépôt en est à la version 0.3.1.
+Les numéros de version des jalons (v1.1, v1.2…) sont ceux de la cible ; le dépôt en est à la version 0.7.0.
 
 ---
 
@@ -189,6 +193,10 @@ implémentation.
   redémarrage.
 - Toute intégration externe doit avoir des tests de contrat et une
   documentation.
+- La complexité reste en arrière-plan : l'interface principale sert à lire
+  et à parcourir la bibliothèque. La configuration des serveurs et des
+  collecteurs, comme le suivi de la collecte, se trouvent dans les
+  réglages et ne s'affichent que lorsque l'utilisateur vient les chercher.
 
 ---
 
@@ -284,7 +292,7 @@ téléchargent des chapitres.
 | JOB-002 | P1 | Ajouter états et historique des tâches | Queues, running, completed, failed, cancelled |
 | JOB-003 | P1 | Ajouter retry avec backoff | Pas de boucle de relance infinie |
 | JOB-004 | P1 | Ajouter annulation si supportée | L'UI reflète la capacité réelle |
-| JOB-005 | P1 | Créer l'écran Collecte | Collecteurs, suivis, tâches et erreurs visibles |
+| JOB-005 | P1 | Interface de suivi des tâches de collecte accessible depuis les réglages | Résumé dans Réglages (collecteurs, nombre d'actifs) ; écran secondaire avec en cours, file d'attente, erreurs, historique, relance et annulation ; pas d'onglet dans la navigation principale ni de tableau de bord permanent |
 | COL-007 | P1 | Relier collecte et bibliothèque | Après téléchargement, scan/import et vérification |
 | COL-008 | P1 | Ajouter règles d'automatisation configurables | Opt-in explicite par série/source/langue |
 
