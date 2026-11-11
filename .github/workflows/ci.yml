@@ -26,6 +26,8 @@ jobs:
         run: node tests/unit_tasks.mjs
       - name: Facade (unit)
         run: node tests/unit_facade.mjs
+      - name: Profiles (unit)
+        run: node tests/unit_profiles.mjs
       - name: Security headers (nginx)
         run: |
           command -v nginx >/dev/null || sudo apt-get install -y --no-install-recommends nginx-light

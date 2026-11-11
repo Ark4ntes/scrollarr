@@ -204,37 +204,44 @@ const overlay = {
 let flushing = null;
 async function flush() {
   clearTimeout(timer);
-  let done = false;
+  let again = false; // un document a changé pendant son écriture : il part au passage suivant
   flushing ??= (async () => {
     // Les documents de série d'abord : l'index est recalculé à partir d'eux.
     const items = [...dirty.keys()].sort((a, b) => a.endsWith('|idx') - b.endsWith('|idx'));
+    let failure;
     for (const item of items) {
-      const [sid, name] = item.split('|');
-      const key = prefix() + name;
-      // Lire avant d'écrire : un autre appareil a pu avancer entre-temps.
-      // Tant que le serveur ne répond pas (hors ligne), l'élément reste à renvoyer.
-      const remote = (await api.loadDocs(key))[sid]?.[key];
-      if (remote !== undefined) absorb(sid, name, remote);
-      const d = docs[sid] || emptyServer();
-      if (name === 'idx') {
-        // Les compteurs se déduisent des documents de série, qui font foi.
-        for (const k of Object.keys(d.series)) recount(d, k);
-        prune(d);
-      }
-      // Numéro relevé au moment exact où le contenu est figé pour l'envoi.
-      const sent = dirty.get(item);
-      await api.saveDoc(sid, key, JSON.stringify(name === 'idx' ? d.idx : d.series[name.slice(2)] || {}));
-      // Si le document a encore changé pendant l'écriture, il reste à renvoyer.
-      if (dirty.get(item) === sent) dirty.delete(item);
+      // Chaque document est indépendant : un serveur qui ne peut pas stocker le sien
+      // (arrêté, ou sans stockage) ne doit pas bloquer l'envoi des autres.
+      try {
+        const [sid, name] = item.split('|');
+        const key = prefix() + name;
+        // Lire avant d'écrire : un autre appareil a pu avancer entre-temps.
+        // Tant que le serveur ne répond pas (hors ligne), l'élément reste à renvoyer.
+        const remote = (await api.loadDocs(key))[sid]?.[key];
+        if (remote !== undefined) absorb(sid, name, remote);
+        const d = docs[sid] || emptyServer();
+        if (name === 'idx') {
+          // Les compteurs se déduisent des documents de série, qui font foi.
+          for (const k of Object.keys(d.series)) recount(d, k);
+          prune(d);
+        }
+        // Numéro relevé au moment exact où le contenu est figé pour l'envoi.
+        const sent = dirty.get(item);
+        await api.saveDoc(sid, key, JSON.stringify(name === 'idx' ? d.idx : d.series[name.slice(2)] || {}));
+        // Si le document a encore changé pendant l'écriture, il reste à renvoyer.
+        if (dirty.get(item) === sent) dirty.delete(item); else again = true;
+      } catch (e) { failure ??= e; } // l'élément reste à renvoyer, on passe au suivant
     }
+    if ([...dirty.keys()].some((k) => !items.includes(k))) again = true; // document apparu pendant le passage
     mirror();
-    done = true;
+    if (failure) throw failure;
   })().finally(() => {
     flushing = null;
     mirror(); // même après un échec : ce qui n'est pas parti doit survivre à un rechargement
-    // Ce qui a été modifié pendant ce passage part au suivant. Après un échec
-    // (hors ligne), on attend le retour du réseau plutôt que de boucler.
-    if (done && dirty.size) { clearTimeout(timer); timer = setTimeout(() => flush().catch(() => {}), 1500); }
+    // Ce qui a été modifié pendant ce passage part au suivant. Un document en échec
+    // (hors ligne, serveur sans stockage) n'est pas réessayé en boucle : il attend
+    // le retour du réseau ou la prochaine modification.
+    if (again) { clearTimeout(timer); timer = setTimeout(() => flush().catch(() => {}), 1500); }
   });
   return flushing;
 }
