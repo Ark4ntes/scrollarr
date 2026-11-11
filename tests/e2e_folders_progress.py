@@ -137,6 +137,7 @@ def progress_flow(b):
     check('4 home: the hero resumes the latest chapter', 'Vous en étiez là' in pg.inner_text('.hero') and 'Reprendre' in pg.inner_text('.hero'), pg.inner_text('.hero')[:80])
     rows = pg.eval_on_selector_all('.row-head h2', 'e=>e.map(x=>x.textContent)')
     check('4 home: "Reprendre" holds the other chapters in progress', rows[:1] == ['Reprendre'] and pg.locator('.resume').count() == 2, (rows, pg.locator('.resume').count()))
+    check('4 home: no "Reprendre" card says "not started yet" (an archive never reopened has no page total)', 'Pas encore commencé' not in ' '.join(pg.eval_on_selector_all('.resume', 'e=>e.map(x=>x.innerText)')))
     shot(pg, '75-folders-home-progress.png')
     pg.goto(B + '/#/my/recent'); pg.wait_for_selector('.lines .line'); pg.wait_for_timeout(500)
     lines = pg.eval_on_selector_all('.line', 'e=>e.map(x=>x.innerText.replace(/\\n/g," | "))')

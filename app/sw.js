@@ -3,7 +3,7 @@
 //  - pages téléchargées : servies depuis le cache « téléchargements » ;
 //  - vignettes : cache d'abord, rafraîchies en arrière-plan ;
 //  - notifications push.
-const SHELL = 'scrollarr-shell-v13';
+const SHELL = 'scrollarr-shell-v14';
 const THUMBS = 'scrollarr-thumbs-v1';
 const DL = 'scrollarr-dl-v1'; // doit correspondre à DL_CACHE dans js/config.js
 const THUMBS_MAX = 700;
