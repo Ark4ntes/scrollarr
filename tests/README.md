@@ -10,6 +10,8 @@ tests/check_syntax.sh
 
 Runs `node --check` on `app/js/**`, `app/sw.js`, `dev/**`, `notifier/server.js` and `folders/*.js`, then parses every GraphQL query of the Suwayomi connector. The `graphql` package is installed in `tests/graphql/` only (the repo root has no `package.json`). Requires Node 22 and network access for `npm install`.
 
+The folders tests import `yauzl`: run `npm ci --omit=dev` in `folders/` once before them (CI does).
+
 ## End-to-end tests (~4 minutes for both scripts)
 
 Headless browser tests (Playwright for Python) that start the demo server (`node dev/mock-servers.mjs`) on ports 8391-8397 and 8411-8412 and drive the app.
@@ -32,7 +34,10 @@ node tests/unit_folders_config.mjs   # folders service: every invalid configurat
 node tests/unit_folders_auth.mjs     # folders service: password/none modes, sessions, attempt limit, cross-origin guards (~3 s)
 node tests/unit_folders_library.mjs  # folders service: index, invalidation, unavailable libraries (~1 s)
 node tests/integration_folders.mjs   # folders service started on a generated library, structure walked over HTTP (~1 s)
-tests/container_folders.sh           # folders image with read-only mounts (needs Docker)
+node tests/unit_folders_archive.mjs  # folders service: hostile archives built byte by byte, every reading limit, image types (~3 s)
+node tests/integration_folders_pages.mjs  # folders service: pages, covers, 304, streaming of a 120 MB archive, nothing written (~3 s)
+node tests/integration_folders_invalidation.mjs  # folders service: one test per row of the events table of the study (~4 s)
+tests/container_folders.sh           # folders image with read-only mounts, reads a page and a cover inside it (needs Docker)
 python3 tests/nginx_headers.py # security headers on every nginx location, template rendered and run locally (needs nginx, curl; ~3 s)
 node tests/unit_profiles.mjs    # profile sync: independent documents, list merge (~8 s)
 node tests/unit_store.mjs       # subscriptions: a 404 must be seen twice, 24 h apart, before deleting (instant)

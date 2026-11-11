@@ -117,6 +117,9 @@ jobs:
       - name: Folders pages and covers over HTTP (integration)
         run: node tests/integration_folders_pages.mjs
         if: ${{ !cancelled() }}
+      - name: Folders invalidation (integration)
+        run: node tests/integration_folders_invalidation.mjs
+        if: ${{ !cancelled() }}
       - name: Folders container (read-only mounts, health)
         run: tests/container_folders.sh
         if: ${{ !cancelled() }}

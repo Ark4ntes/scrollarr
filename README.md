@@ -151,7 +151,7 @@ The notifier polls each server every `POLL_MINUTES` minutes and sends one notifi
 
 ## Folders service (optional, in development)
 
-`folders/` is a small Node service that will let Scrollarr read manga stored in plain folders on your server, without Suwayomi or Komga. **It is not connected to the app yet**: this first step only provides the secured service and the browsing of libraries, series and chapters over HTTP. Pages and covers, archive reading, reading progress and the integration into the app come in later steps (see `docs/design/READ-002-connecteur-dossiers.md`).
+`folders/` is a small Node service that will let Scrollarr read manga stored in plain folders on your server, without Suwayomi or Komga. **It is not connected to the app yet**: the service is secured and serves the structure (libraries, series, chapters), the pages of image folders and CBZ/ZIP archives (streamed, never extracted to disk) and a simple cover per series over HTTP. Reading progress and the integration into the app come in later steps (see `docs/design/READ-002-connecteur-dossiers.md`). Reading rules, limits and how changes in the folders are detected: `folders/README.md`.
 
 It mounts your scans **read-only**, never receives a path from the client (only opaque identifiers), never follows symbolic links, and publishes no port: only the Scrollarr container will reach it, through a dedicated internal Docker network.
 
@@ -177,6 +177,8 @@ Any other value, a missing password, a password shorter than 12 characters, an u
 - Requests other than `GET` must carry `X-Requested-With` and `Content-Type: application/json`, and a mismatching `Origin` is refused. This also applies on a local network.
 
 **Layout.** A library is a folder mounted under `/libraries/<name>`; a series is a sub-folder; a chapter is a `.cbz`/`.zip` archive or a folder directly containing images (intermediate folders such as volumes are tolerated, 3 levels at most). Reading order is the natural sort of names (`Chapter 2` before `Chapter 10`). Details, warnings and renaming effects: see the study.
+
+**Pages and covers.** Page and cover images are served as they are (JPEG, PNG, WebP, GIF, AVIF, recognised by their first bytes, never by their extension; anything else, SVG included, is refused). Archives are read in place with [`yauzl`](https://github.com/thejoshwolfe/yauzl), the service's only dependency (version locked in `folders/package-lock.json`); hostile or oversized archives are refused with a readable error (limits in `folders/README.md`).
 
 **Data.** `data/folders/` holds a session signing key and a small file remembering which libraries have held series. Back it up by copying it. A library that cannot be read, or that is empty although it used to hold series (share not mounted, encrypted folder locked), is reported `unavailable` in `/health` and answers `503`, never `404`: with a `404` the app would delete your subscriptions.
 
