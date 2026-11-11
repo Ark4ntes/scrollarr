@@ -8,7 +8,7 @@
 //    de petits documents rangés sur le serveur (voir loadDocs/saveDoc dans
 //    api.js), ce qui les rend disponibles sur tous les appareils.
 import * as api from './api.js';
-import { mergeSeries, mergeIdx, compareStamp, deviceId } from './sync.js';
+import { mergeSeries, mergeIdx, mergeProfiles, compareStamp, deviceId } from './sync.js';
 
 const LIST_KEY = 'scrollarr.profiles';
 const ACTIVE_KEY = 'scrollarr.profile';
@@ -18,7 +18,10 @@ const RECENT_MAX = 40;
 
 const readJson = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
 
-let profiles = readJson(LIST_MIRROR, null) || [{ id: MAIN, name: 'Principal' }];
+// `entries` garde aussi les profils supprimés (marque `del`), pour que la suppression
+// se propage ; `profiles` ne contient que les profils vivants, ceux que l'on montre.
+let entries = mergeProfiles(readJson(LIST_MIRROR, null), [{ id: MAIN, name: 'Principal' }]);
+let profiles = entries.filter((p) => !p.del);
 let activeId = localStorage.getItem(ACTIVE_KEY) || MAIN;
 
 export const list = () => profiles;
@@ -34,28 +37,47 @@ const mirrorKey = (id = activeId) => `scrollarr.pmirror.${id}`;
 
 // ───────────── Liste des profils ─────────────
 
-async function saveList() {
-  localStorage.setItem(LIST_MIRROR, JSON.stringify(profiles));
-  await api.setClientSetting(LIST_KEY, JSON.stringify(profiles));
+const setEntries = (next) => { entries = next; profiles = entries.filter((p) => !p.del); };
+const stamped = (prev, fields) => ({ ...prev, ...fields, rev: (prev?.rev || 0) + 1, dev: deviceId() });
+const parseList = (text) => { try { const v = JSON.parse(text); return Array.isArray(v) ? v : []; } catch { return []; } };
+
+/**
+ * Fusionne la liste de l'appareil avec celle de chaque serveur (et non avec celle du seul
+ * serveur prioritaire, qui peut être en retard), puis recopie le résultat là où il diffère.
+ * Un profil créé ailleurs n'est pas perdu, un profil supprimé exprès ne revient pas.
+ */
+async function syncList({ write }) {
+  let remote = {};
+  try { remote = await api.loadDocs(LIST_KEY); } catch { /* serveurs injoignables : on garde la liste connue */ }
+  const texts = Object.values(remote).map((docs) => docs[LIST_KEY]).filter((x) => x !== undefined);
+  setEntries(texts.reduce((acc, text) => mergeProfiles(acc, parseList(text)), entries));
+  localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
+  const text = JSON.stringify(entries);
+  // Les serveurs en retard sont remis à niveau, sauf tant qu'il n'existe que le profil principal.
+  const stale = entries.length > 1 && Object.values(remote).some((docs) => docs[LIST_KEY] !== text);
+  if (write || stale) await api.setClientSetting(LIST_KEY, text);
 }
 
 export async function create(name) {
-  const p = { id: 'p' + Math.random().toString(36).slice(2, 8), name: name.trim().slice(0, 30) };
-  profiles = [...profiles, p];
+  const p = stamped(null, { id: 'p' + Math.random().toString(36).slice(2, 8), name: name.trim().slice(0, 30), added: Date.now() });
+  setEntries([...entries, p]);
   // L'appareil qui crée un second profil garde le sien : pas besoin de lui redemander « Qui lit ? ».
   if (!localStorage.getItem(ACTIVE_KEY)) localStorage.setItem(ACTIVE_KEY, activeId);
-  await saveList();
+  localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
+  await syncList({ write: true });
   return p;
 }
 export async function rename(id, name) {
-  profiles = profiles.map((p) => (p.id === id ? { ...p, name: name.trim().slice(0, 30) } : p));
-  await saveList();
+  setEntries(entries.map((p) => (p.id === id ? stamped(p, { name: name.trim().slice(0, 30) }) : p)));
+  localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
+  await syncList({ write: true });
 }
 /** Supprime un profil secondaire et tout son historique. */
 export async function remove(id) {
   if (id === MAIN) return;
-  profiles = profiles.filter((p) => p.id !== id);
-  await saveList();
+  setEntries(entries.map((p) => (p.id === id ? stamped(p, { del: 1 }) : p)));
+  localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
+  await syncList({ write: true });
   await api.deleteDocs(prefix(id)).catch(() => {});
   localStorage.removeItem(mirrorKey(id));
   localStorage.removeItem(`scrollarr.p.${id}.fav`);
@@ -204,37 +226,44 @@ const overlay = {
 let flushing = null;
 async function flush() {
   clearTimeout(timer);
-  let done = false;
+  let again = false; // un document a changé pendant son écriture : il part au passage suivant
   flushing ??= (async () => {
     // Les documents de série d'abord : l'index est recalculé à partir d'eux.
     const items = [...dirty.keys()].sort((a, b) => a.endsWith('|idx') - b.endsWith('|idx'));
+    let failure;
     for (const item of items) {
-      const [sid, name] = item.split('|');
-      const key = prefix() + name;
-      // Lire avant d'écrire : un autre appareil a pu avancer entre-temps.
-      // Tant que le serveur ne répond pas (hors ligne), l'élément reste à renvoyer.
-      const remote = (await api.loadDocs(key))[sid]?.[key];
-      if (remote !== undefined) absorb(sid, name, remote);
-      const d = docs[sid] || emptyServer();
-      if (name === 'idx') {
-        // Les compteurs se déduisent des documents de série, qui font foi.
-        for (const k of Object.keys(d.series)) recount(d, k);
-        prune(d);
-      }
-      // Numéro relevé au moment exact où le contenu est figé pour l'envoi.
-      const sent = dirty.get(item);
-      await api.saveDoc(sid, key, JSON.stringify(name === 'idx' ? d.idx : d.series[name.slice(2)] || {}));
-      // Si le document a encore changé pendant l'écriture, il reste à renvoyer.
-      if (dirty.get(item) === sent) dirty.delete(item);
+      // Chaque document est indépendant : un serveur qui ne peut pas stocker le sien
+      // (arrêté, ou sans stockage) ne doit pas bloquer l'envoi des autres.
+      try {
+        const [sid, name] = item.split('|');
+        const key = prefix() + name;
+        // Lire avant d'écrire : un autre appareil a pu avancer entre-temps.
+        // Tant que le serveur ne répond pas (hors ligne), l'élément reste à renvoyer.
+        const remote = (await api.loadDocs(key))[sid]?.[key];
+        if (remote !== undefined) absorb(sid, name, remote);
+        const d = docs[sid] || emptyServer();
+        if (name === 'idx') {
+          // Les compteurs se déduisent des documents de série, qui font foi.
+          for (const k of Object.keys(d.series)) recount(d, k);
+          prune(d);
+        }
+        // Numéro relevé au moment exact où le contenu est figé pour l'envoi.
+        const sent = dirty.get(item);
+        await api.saveDoc(sid, key, JSON.stringify(name === 'idx' ? d.idx : d.series[name.slice(2)] || {}));
+        // Si le document a encore changé pendant l'écriture, il reste à renvoyer.
+        if (dirty.get(item) === sent) dirty.delete(item); else again = true;
+      } catch (e) { failure ??= e; } // l'élément reste à renvoyer, on passe au suivant
     }
+    if ([...dirty.keys()].some((k) => !items.includes(k))) again = true; // document apparu pendant le passage
     mirror();
-    done = true;
+    if (failure) throw failure;
   })().finally(() => {
     flushing = null;
     mirror(); // même après un échec : ce qui n'est pas parti doit survivre à un rechargement
-    // Ce qui a été modifié pendant ce passage part au suivant. Après un échec
-    // (hors ligne), on attend le retour du réseau plutôt que de boucler.
-    if (done && dirty.size) { clearTimeout(timer); timer = setTimeout(() => flush().catch(() => {}), 1500); }
+    // Ce qui a été modifié pendant ce passage part au suivant. Un document en échec
+    // (hors ligne, serveur sans stockage) n'est pas réessayé en boucle : il attend
+    // le retour du réseau ou la prochaine modification.
+    if (again) { clearTimeout(timer); timer = setTimeout(() => flush().catch(() => {}), 1500); }
   });
   return flushing;
 }
@@ -243,13 +272,8 @@ async function flush() {
 
 /** À appeler une fois les serveurs connectés. */
 export async function load() {
-  try {
-    const remote = JSON.parse(await api.getClientSetting(LIST_KEY));
-    if (Array.isArray(remote) && remote.some((p) => p.id === MAIN)) {
-      profiles = remote;
-      localStorage.setItem(LIST_MIRROR, JSON.stringify(profiles));
-    }
-  } catch { /* hors ligne, ou aucun profil créé : on garde la liste connue */ }
+  try { await syncList({ write: false }); }
+  catch { /* hors ligne, ou aucun profil créé : on garde la liste connue */ }
   if (!profiles.some((p) => p.id === activeId)) activeId = MAIN;
   if (!isExtra()) { api.setOverlay(null); return; }
 

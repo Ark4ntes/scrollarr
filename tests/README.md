@@ -33,6 +33,11 @@ node tests/unit_folders_auth.mjs     # folders service: password/none modes, ses
 node tests/unit_folders_library.mjs  # folders service: index, invalidation, unavailable libraries (~1 s)
 node tests/integration_folders.mjs   # folders service started on a generated library, structure walked over HTTP (~1 s)
 tests/container_folders.sh           # folders image with read-only mounts (needs Docker)
+python3 tests/nginx_headers.py # security headers on every nginx location, template rendered and run locally (needs nginx, curl; ~3 s)
+node tests/unit_profiles.mjs    # profile sync: independent documents, list merge (~8 s)
+node tests/unit_store.mjs       # subscriptions: a 404 must be seen twice, 24 h apart, before deleting (instant)
+node tests/unit_facade.mjs      # facade with test-only readers, e.g. one without progress.write (instant)
+python tests/e2e_progress.py    # a reader that does not declare progress.write: no menu action, no request (~30 s)
 python tests/e2e_offline.py     # downloaded chapters when the server hangs, is refused by a proxy, or there is no network (~40 s)
 python tests/e2e_tasks.py       # collector tasks: progress, failure, cancellation, history (~40 s)
 ```

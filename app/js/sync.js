@@ -54,6 +54,28 @@ export function mergeFavs(a, b) {
   return { updatedAt: Math.max(a?.updatedAt || 0, b?.updatedAt || 0), items };
 }
 
+// Profils : [ { id, name, added?, rev?, dev?, del? } ]. Même règle que les abonnements :
+// l'estampille la plus haute l'emporte et la suppression laisse une marque (del).
+// Une liste écrite avant les estampilles vaut révision 0 : elle ne l'emporte jamais
+// sur une entrée estampilée, et à égalité la marque de suppression prévaut.
+const compareProfile = (x, y) => compareStamp(x.rev, x.dev, y.rev, y.dev)
+  || (x.del || 0) - (y.del || 0)
+  || ((x.name || '') === (y.name || '') ? 0 : (x.name || '') > (y.name || '') ? 1 : -1);
+/** Fusion de deux listes de profils, par identifiant. Le profil principal ne peut pas être supprimé. */
+export function mergeProfiles(a, b, mainId = 'main') {
+  const byId = new Map();
+  const order = new Map();
+  for (const e of [...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]) {
+    if (!e || typeof e.id !== 'string' || !e.id) continue;
+    if (!order.has(e.id)) order.set(e.id, order.size);
+    if (!byId.has(e.id) || compareProfile(e, byId.get(e.id)) > 0) byId.set(e.id, e);
+  }
+  if (byId.has(mainId) && byId.get(mainId).del) { const { del, ...rest } = byId.get(mainId); byId.set(mainId, rest); }
+  // Le principal d'abord, puis par date de création (les listes anciennes gardent leur ordre).
+  const rank = (e) => (e.id === mainId ? -1 : e.added || 0);
+  return [...byId.values()].sort((x, y) => rank(x) - rank(y) || order.get(x.id) - order.get(y.id));
+}
+
 let device;
 /** Identifiant stable de cet appareil (navigateur), sans rapport avec la personne. */
 export function deviceId() {

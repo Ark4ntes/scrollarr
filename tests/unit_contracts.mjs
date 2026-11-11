@@ -19,6 +19,8 @@ const reader = (extra = {}) => ({
 const collector = (extra = {}) => ({ id: 'demo', label: 'Demo', capabilities: [CAP.COLLECT_CHAPTERS], serves: ['demo'], session: 'demo', collectChapters: fn, ...extra });
 
 test('a complete reader is accepted', () => assert.ok(validateReader(reader())));
+test('a reader without progress.write is supported (reading only, no progress methods required)', () =>
+  assert.ok(validateReader(reader({ capabilities: [CAP.SERIES_LIST, CAP.CHAPTER_READ] }))));
 test('a reader missing a method is refused', () => assert.throws(() => validateReader(reader({ bookPages: undefined })), /bookPages/));
 test('a reader declaring progress.write must provide the methods', () =>
   assert.throws(() => validateReader(reader({ capabilities: [CAP.PROGRESS_WRITE] })), /saveProgress/));

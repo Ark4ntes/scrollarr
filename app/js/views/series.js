@@ -1,4 +1,5 @@
 import * as api from '../api.js';
+import { CAP } from '../connectors/contract.js';
 import * as store from '../store.js';
 import * as downloads from '../downloads.js';
 import { h, icon, cover, toast, actionSheet, fmtDate, chapterNo, chapterTitle, add, fill } from '../ui.js';
@@ -56,6 +57,8 @@ export async function series(root, { id }) {
     // Avec plusieurs serveurs, on précise d'où vient la série.
     api.multi() ? api.serverLabel(id) : null,
   ].filter(Boolean);
+  // Un lecteur sans suivi de lecture ne propose aucune action « lu / non lu ».
+  const tracks = api.can(id, CAP.PROGRESS_WRITE);
   const onServer = !offline && api.canServerDownload(id);
   const collector = onServer ? api.serverDownloadLabel(id) : '';
 
@@ -83,7 +86,7 @@ export async function series(root, { id }) {
       h('div.shero-tone', { 'aria-hidden': 'true' }),
       h('div.shero-bar',
         h('button.iconbtn.glass', { type: 'button', 'aria-label': t('Retour'), onclick: () => back('/library') }, icon('back')),
-        offline ? null : h('button.iconbtn.glass', { type: 'button', 'aria-label': t('Autres actions'), onclick: seriesMenu }, icon('more'))),
+        offline || !tracks ? null : h('button.iconbtn.glass', { type: 'button', 'aria-label': t('Autres actions'), onclick: seriesMenu }, icon('more'))),
       h('div.shero-main',
         h('div.shero-cover', cover(api.seriesThumb(id))),
         h('div.shero-text',
@@ -172,7 +175,7 @@ export async function series(root, { id }) {
   function chapterMenu(b) {
     const d = downloads.get(b.id);
     actionSheet(chapterTitle(b), [
-      offline ? null : b.readProgress?.completed
+      offline || !api.can(b.id, CAP.PROGRESS_WRITE) ? null : b.readProgress?.completed
         ? { icon: 'refresh', label: t('Marquer comme non lu'), run: () => act(() => api.markBookUnread(b.id)) }
         : { icon: 'check', label: t('Marquer comme lu'), run: () => act(() => api.markBookRead(b.id)) },
       d

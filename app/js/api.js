@@ -321,6 +321,8 @@ const writeQueue = (q) => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
  * renvoyée au serveur dès qu'il redevient joignable.
  */
 export async function saveProgress(bookId, page, completed, { keepalive = false, book: known } = {}) {
+  // Lecteur sans « chapter.progress.write » : on lit, mais rien n'est enregistré (ni file, ni profil).
+  if (!can(bookId, CAP.PROGRESS_WRITE)) return true;
   if (overlay) {
     overlay.record(known || (await book(bookId)), page, completed, { now: keepalive });
     return true;
@@ -356,6 +358,7 @@ export async function flushProgress() {
 function changing(method) {
   return async (id) => {
     const [c, raw] = route(id);
+    if (!c.capabilities.includes(CAP.PROGRESS_WRITE)) return; // rien à enregistrer pour ce lecteur
     if (!overlay) await c[method](raw);
     else if (method === 'markBookRead') { const b = await book(id); overlay.record(b, b.media?.pagesCount || 1, true, { quiet: true }); }
     else if (method === 'markBookUnread') overlay.forget([await book(id)]);

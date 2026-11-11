@@ -121,6 +121,11 @@ let newCounts = {};
 export const newCount = (id) => newCounts[id] || 0;
 export const hasNews = () => Object.values(newCounts).some((n) => n > 0);
 
+// Un 404 sur une série peut venir d'un serveur mal configuré ou d'une bibliothèque
+// vidée un moment : l'abonnement n'est supprimé que si le 404 est constaté sur
+// deux rafraîchissements espacés d'au moins ce délai. La série revue le remet à zéro.
+const GONE_AFTER = 24 * 3600 * 1000;
+
 /** Interroge le serveur de chaque abonnement et renvoie les fiches à jour. */
 export async function refreshFavorites() {
   const items = favorites();
@@ -131,15 +136,28 @@ export async function refreshFavorites() {
     catch (e) { return e instanceof api.ApiError && e.status === 404 ? 'gone' : null; }
   });
   const f = loadFavs();
-  let changed = false;
+  let changed = false; // un abonnement supprimé : à recopier sur les serveurs
+  let noted = false;   // simple constat local (goneSince), sans révision ni synchronisation
   newCounts = {};
   const out = [];
   items.forEach((item, i) => {
-    const s = fresh[i];
-    if (s === 'gone') { f.items[item.id] = { id: item.id, title: item.title, del: 1, ...stamp(item) }; changed = true; return; }
+    let s = fresh[i];
+    if (s === 'gone') {
+      if (item.goneSince && Date.now() - item.goneSince >= GONE_AFTER) {
+        f.items[item.id] = { id: item.id, title: item.title, del: 1, ...stamp(item) };
+        changed = true;
+        return;
+      }
+      if (!item.goneSince) { item = f.items[item.id] = { ...(f.items[item.id] || item), goneSince: Date.now() }; noted = true; }
+      s = null; // gardé, simplement pas rafraîchi
+    } else if (s && item.goneSince) {
+      const { goneSince, ...rest } = f.items[item.id] || item;
+      item = f.items[item.id] = rest;
+      noted = true;
+    }
     if (s) newCounts[item.id] = Math.max(0, s.booksCount - (item.seen ?? s.booksCount));
     out.push({ item, series: s });
   });
-  if (changed) saveFavs(); else emit('favorites');
+  if (changed) saveFavs(); else { if (noted) persist(); emit('favorites'); }
   return out;
 }
