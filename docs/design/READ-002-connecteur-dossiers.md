@@ -13,6 +13,8 @@
 - **Découpage** en quatre étapes A à D au lieu de huit lots, et quatre tâches techniques suivies à part (§5).
 - **Nouveaux constats** faits en relisant le code pour cette révision (annexe A, points 5 à 9), dont deux conditionnent l'étape C.
 
+**Décisions de Julien, 11 novembre 2026.** La version 2 est validée. Les trois décisions ouvertes et toutes les questions du §6 sont tranchées selon les réponses recommandées dans ce document : installation « dossiers seuls » sans profils ni abonnements synchronisés tant qu'il n'existe pas de stockage central ; capacité `chapter.progress.profiles` en dernier sous-lot de l'étape C ; « En cours », « Lus récemment » et les mises à jour récentes conservés en V1. Le développement peut commencer par l'étape A et les tâches techniques suivies.
+
 ## 1. Résumé et recommandation
 
 **Recommandation.** Un petit service Node dédié et facultatif, `scrollarr-folders`, calqué sur `notifier/` et placé derrière le proxy nginx sous `/folders/`. Il monte les dossiers de scans **en lecture seule**, ne reçoit jamais de chemin de la part du client, lit les **dossiers d'images et les CBZ/ZIP** sans rien extraire sur disque, et ne conserve qu'**une seule chose** : la progression de lecture. Il refuse de démarrer sans mode d'authentification explicite. Les URL de pages et de couverture reprennent la forme de celles de Komga : `app/sw.js` change de trois lignes.
