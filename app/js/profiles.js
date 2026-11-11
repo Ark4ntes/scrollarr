@@ -8,7 +8,7 @@
 //    de petits documents rangés sur le serveur (voir loadDocs/saveDoc dans
 //    api.js), ce qui les rend disponibles sur tous les appareils.
 import * as api from './api.js';
-import { mergeSeries, mergeIdx, compareStamp, deviceId } from './sync.js';
+import { mergeSeries, mergeIdx, mergeProfiles, compareStamp, deviceId } from './sync.js';
 
 const LIST_KEY = 'scrollarr.profiles';
 const ACTIVE_KEY = 'scrollarr.profile';
@@ -18,7 +18,10 @@ const RECENT_MAX = 40;
 
 const readJson = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
 
-let profiles = readJson(LIST_MIRROR, null) || [{ id: MAIN, name: 'Principal' }];
+// `entries` garde aussi les profils supprimés (marque `del`), pour que la suppression
+// se propage ; `profiles` ne contient que les profils vivants, ceux que l'on montre.
+let entries = mergeProfiles(readJson(LIST_MIRROR, null), [{ id: MAIN, name: 'Principal' }]);
+let profiles = entries.filter((p) => !p.del);
 let activeId = localStorage.getItem(ACTIVE_KEY) || MAIN;
 
 export const list = () => profiles;
@@ -34,28 +37,47 @@ const mirrorKey = (id = activeId) => `scrollarr.pmirror.${id}`;
 
 // ───────────── Liste des profils ─────────────
 
-async function saveList() {
-  localStorage.setItem(LIST_MIRROR, JSON.stringify(profiles));
-  await api.setClientSetting(LIST_KEY, JSON.stringify(profiles));
+const setEntries = (next) => { entries = next; profiles = entries.filter((p) => !p.del); };
+const stamped = (prev, fields) => ({ ...prev, ...fields, rev: (prev?.rev || 0) + 1, dev: deviceId() });
+const parseList = (text) => { try { const v = JSON.parse(text); return Array.isArray(v) ? v : []; } catch { return []; } };
+
+/**
+ * Fusionne la liste de l'appareil avec celle de chaque serveur (et non avec celle du seul
+ * serveur prioritaire, qui peut être en retard), puis recopie le résultat là où il diffère.
+ * Un profil créé ailleurs n'est pas perdu, un profil supprimé exprès ne revient pas.
+ */
+async function syncList({ write }) {
+  let remote = {};
+  try { remote = await api.loadDocs(LIST_KEY); } catch { /* serveurs injoignables : on garde la liste connue */ }
+  const texts = Object.values(remote).map((docs) => docs[LIST_KEY]).filter((x) => x !== undefined);
+  setEntries(texts.reduce((acc, text) => mergeProfiles(acc, parseList(text)), entries));
+  localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
+  const text = JSON.stringify(entries);
+  // Les serveurs en retard sont remis à niveau, sauf tant qu'il n'existe que le profil principal.
+  const stale = entries.length > 1 && Object.values(remote).some((docs) => docs[LIST_KEY] !== text);
+  if (write || stale) await api.setClientSetting(LIST_KEY, text);
 }
 
 export async function create(name) {
-  const p = { id: 'p' + Math.random().toString(36).slice(2, 8), name: name.trim().slice(0, 30) };
-  profiles = [...profiles, p];
+  const p = stamped(null, { id: 'p' + Math.random().toString(36).slice(2, 8), name: name.trim().slice(0, 30), added: Date.now() });
+  setEntries([...entries, p]);
   // L'appareil qui crée un second profil garde le sien : pas besoin de lui redemander « Qui lit ? ».
   if (!localStorage.getItem(ACTIVE_KEY)) localStorage.setItem(ACTIVE_KEY, activeId);
-  await saveList();
+  localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
+  await syncList({ write: true });
   return p;
 }
 export async function rename(id, name) {
-  profiles = profiles.map((p) => (p.id === id ? { ...p, name: name.trim().slice(0, 30) } : p));
-  await saveList();
+  setEntries(entries.map((p) => (p.id === id ? stamped(p, { name: name.trim().slice(0, 30) }) : p)));
+  localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
+  await syncList({ write: true });
 }
 /** Supprime un profil secondaire et tout son historique. */
 export async function remove(id) {
   if (id === MAIN) return;
-  profiles = profiles.filter((p) => p.id !== id);
-  await saveList();
+  setEntries(entries.map((p) => (p.id === id ? stamped(p, { del: 1 }) : p)));
+  localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
+  await syncList({ write: true });
   await api.deleteDocs(prefix(id)).catch(() => {});
   localStorage.removeItem(mirrorKey(id));
   localStorage.removeItem(`scrollarr.p.${id}.fav`);
@@ -250,13 +272,8 @@ async function flush() {
 
 /** À appeler une fois les serveurs connectés. */
 export async function load() {
-  try {
-    const remote = JSON.parse(await api.getClientSetting(LIST_KEY));
-    if (Array.isArray(remote) && remote.some((p) => p.id === MAIN)) {
-      profiles = remote;
-      localStorage.setItem(LIST_MIRROR, JSON.stringify(profiles));
-    }
-  } catch { /* hors ligne, ou aucun profil créé : on garde la liste connue */ }
+  try { await syncList({ write: false }); }
+  catch { /* hors ligne, ou aucun profil créé : on garde la liste connue */ }
   if (!profiles.some((p) => p.id === activeId)) activeId = MAIN;
   if (!isExtra()) { api.setOverlay(null); return; }
 

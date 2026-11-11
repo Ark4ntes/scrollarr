@@ -11,7 +11,7 @@ globalThis.localStorage = {
 globalThis.location = new URL('http://localhost/');
 try { Object.defineProperty(globalThis, 'navigator', { value: { onLine: true }, configurable: true }); } catch { /* déjà défini */ }
 globalThis.fetch = async (url) => {
-  if (String(url).endsWith('servers.json')) return { ok: true, json: async () => ({ nostore: true, good: true }) };
+  if (String(url).endsWith('servers.json')) return { ok: true, json: async () => ({ nostore: true, good: true, good2: true }) };
   throw new TypeError('network');
 };
 // Le profil actif est un profil secondaire : l'historique passe par la surcouche testée.
@@ -25,8 +25,8 @@ seedStorage();
 const { CAP } = await import('../app/js/connectors/contract.js');
 const { READERS } = await import('../app/js/connectors/index.js');
 
-const docsOf = { nostore: {}, good: {} };
-const calls = { good: { get: 0, set: 0 }, nostore: { get: 0, set: 0 } };
+const docsOf = { nostore: {}, good: {}, good2: {} };
+const calls = { good: { get: 0, set: 0 }, good2: { get: 0, set: 0 }, nostore: { get: 0, set: 0 } };
 let goodDown = false;
 let goodDelay = 0;
 function makeReader(id, code, withStore) {
@@ -60,6 +60,7 @@ globalThis.__net = await import('../app/js/net.js');
 // « nostore » est placé avant « good » : son document passe en tête de la file d'envoi.
 READERS.push({ id: 'nostore', path: 'nostore', create: () => makeReader('nostore', 'n', false) });
 READERS.push({ id: 'good', path: 'good', create: () => makeReader('good', 'g', true) });
+READERS.push({ id: 'good2', path: 'good2', create: () => makeReader('good2', 'h', true) });
 
 const api = await import('../app/js/api.js');
 const profiles = await import('../app/js/profiles.js');
@@ -118,6 +119,55 @@ await test('a change made during a slow write is kept for the next pass', async 
   const idx = JSON.parse(Object.entries(docsOf.good).find(([k]) => k.endsWith('idx'))[1]);
   assert.ok(idx.r.some((e) => e.b === 'g:4'));
   assert.ok(!mirrored().some((x) => x.startsWith('good|')), JSON.stringify(mirrored()));
+});
+
+// ───────────── Liste des profils ─────────────
+const LIST = 'scrollarr.profiles';
+const MAIN = { id: 'main', name: 'Principal' };
+const idsNow = () => profiles.list().map((p) => p.id);
+const onServer = (id) => JSON.parse(docsOf[id][LIST]).map((p) => p.id + (p.del ? '!' : ''));
+api.setPrimary('good');   // le serveur « prioritaire » est celui qui peut être en retard
+
+await test('list: a stale priority server does not make a profile disappear, and is brought up to date', async () => {
+  docsOf.good[LIST] = JSON.stringify([MAIN]);                                              // en retard : ne connaît pas p1
+  docsOf.good2[LIST] = JSON.stringify([MAIN, { id: 'p1', name: 'Duo' }, { id: 'pz', name: 'Ailleurs', added: 5, rev: 1, dev: 'zz' }]);
+  await profiles.load();
+  assert.deepEqual(idsNow(), ['main', 'p1', 'pz']);            // p1 (local) et pz (créé ailleurs) sont là
+  assert.deepEqual(onServer('good'), ['main', 'p1', 'pz']);
+  assert.deepEqual(JSON.parse(localStorage.getItem('scrollarr.profiles.cache')).map((p) => p.id), ['main', 'p1', 'pz']);
+});
+await test('list: a profile removed on purpose stays removed against a stale server', async () => {
+  await profiles.remove('pz');
+  assert.deepEqual(idsNow(), ['main', 'p1']);
+  docsOf.good2[LIST] = JSON.stringify([MAIN, { id: 'p1', name: 'Duo' }, { id: 'pz', name: 'Ailleurs', added: 5, rev: 1, dev: 'zz' }]);  // copie périmée
+  await profiles.load();
+  assert.deepEqual(idsNow(), ['main', 'p1']);
+  assert.deepEqual(onServer('good2'), ['main', 'p1', 'pz!']);  // la marque est recopiée
+});
+await test('list: creating a profile keeps the ones created elsewhere in the meantime', async () => {
+  docsOf.good[LIST] = docsOf.good2[LIST] = JSON.stringify([MAIN, { id: 'p1', name: 'Duo' }, { id: 'pq', name: 'Autre appareil', added: 7, rev: 1, dev: 'qq' }]);
+  const made = await profiles.create('Neuf');
+  assert.deepEqual(idsNow(), ['main', 'p1', 'pq', made.id]);
+  for (const id of ['good', 'good2']) assert.deepEqual(onServer(id).filter((x) => !x.endsWith('!')), ['main', 'p1', 'pq', made.id], id);
+});
+await test('list: old lists without stamps still load', async () => {
+  docsOf.good[LIST] = docsOf.good2[LIST] = JSON.stringify([MAIN, { id: 'p1', name: 'Duo' }, { id: 'p9', name: 'Ancien' }]);
+  await profiles.load();
+  assert.ok(idsNow().includes('p9') && idsNow().includes('p1'));
+});
+await test('list: rename wins over a stale copy and the main profile cannot be removed', async () => {
+  await profiles.rename('p9', 'Renommé');
+  await profiles.load();
+  assert.equal(profiles.list().find((p) => p.id === 'p9').name, 'Renommé');
+  await profiles.remove('main');
+  assert.ok(idsNow().includes('main'));
+});
+await test('list: offline, the known list is kept', async () => {
+  goodDown = true; docsOf.good2[LIST] = 'not json';
+  const before = idsNow();
+  await profiles.load();
+  assert.deepEqual(idsNow(), before);
+  goodDown = false;
 });
 
 console.log(failed ? `\n${failed} test(s) failed` : '\nAll profile unit tests passed');
