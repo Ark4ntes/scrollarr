@@ -158,10 +158,22 @@ Il monte vos scans **en lecture seule**, ne reçoit jamais de chemin du client (
 
 ```sh
 mkdir -p data/folders && sudo chown 1000:1000 data/folders    # dossier de données, inscriptible par le service
-echo 'FOLDERS_SCANS_PATH=/chemin/vers/scans' >> .env          # un dossier = une bibliothèque (voir docker-compose.yml)
+echo 'FOLDERS_SCANS_PATH=/chemin/vers/scans' >> .env          # le dossier qui contient directement vos séries (voir ci-dessous)
 echo 'FOLDERS_URL=http://folders:8788' >> .env                # permet à Scrollarr de joindre le service (vide = non utilisé)
 docker compose --profile folders up -d --build
 ```
+
+`FOLDERS_SCANS_PATH` doit désigner le dossier qui contient **directement** vos séries :
+
+```
+/chemin/vers/scans/
+  Nom d'une série/        chaque sous-dossier direct est une série
+    Chapitre 1/           un chapitre = un dossier d'images…
+    Chapitre 2.cbz        …ou une archive CBZ/ZIP
+  Autre série/
+```
+
+Un niveau trop haut (un dossier qui regroupe plusieurs collections) et chaque collection est prise pour une série. Vérifiez avec `docker compose logs folders` : le service y indique le nombre de séries et de chapitres trouvés.
 
 Ouvrez ensuite Scrollarr : *Dossiers* apparaît parmi les serveurs (*Réglages > Serveurs*). Seul le conteneur Scrollarr atteint le service, par le réseau interne `folders_net` ; `FOLDERS_URL` est la seule chose dont l'application a besoin.
 

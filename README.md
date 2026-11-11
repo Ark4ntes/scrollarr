@@ -159,10 +159,22 @@ It mounts your scans **read-only**, never receives a path from the client (only 
 
 ```sh
 mkdir -p data/folders && sudo chown 1000:1000 data/folders    # data folder, writable by the service
-echo 'FOLDERS_SCANS_PATH=/path/to/scans' >> .env              # one folder = one library (see docker-compose.yml)
+echo 'FOLDERS_SCANS_PATH=/path/to/scans' >> .env              # the folder that directly contains your series (see below)
 echo 'FOLDERS_URL=http://folders:8788' >> .env                # lets Scrollarr reach the service (empty = not used)
 docker compose --profile folders up -d --build
 ```
+
+`FOLDERS_SCANS_PATH` must be the folder that **directly** contains your series:
+
+```
+/path/to/scans/
+  Series name/            each direct sub-folder is one series
+    Chapter 1/            a chapter is a folder of images…
+    Chapter 2.cbz         …or a CBZ/ZIP archive
+  Another series/
+```
+
+One level too high (a folder grouping several collections) and each collection is taken for a series. Check with `docker compose logs folders`: the service prints how many series and chapters it found.
 
 Then open Scrollarr: *Folders* appears among the servers (*Settings > Servers*). The service is only reachable by the Scrollarr container, through the internal network `folders_net`; `FOLDERS_URL` is the only thing the app needs.
 
