@@ -223,6 +223,7 @@ des intégrations.
 | CORE-001 | P0 | Cartographier l'architecture et les flux existants | Schéma à jour des composants, appels API et stockage |
 | QA-001 | P0 | Ajouter une suite de tests de non-régression | Parcours principaux Komga/Suwayomi couverts |
 | QA-002 | P0 | Définir un environnement de test reproductible | Démarrage local documenté avec données de test |
+| QA-004 | P1 | Valider les tâches Suwayomi sur une instance réelle | File, progression, échec, annulation, relance, reconnexion et retour en ligne vérifiés |
 | SEC-001 | P0 | Auditer le stockage des identifiants et clés API | Aucun secret serveur exposé dans le client ou les logs |
 | SEC-002 | P0 | Auditer authentification, sessions et profils | Scénarios d'accès non autorisé testés |
 | SYNC-001 | P0 | Fiabiliser les écritures concurrentes de progression | Une écriture concurrente ne provoque pas de perte silencieuse |
