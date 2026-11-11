@@ -13,13 +13,16 @@ const byNumber = (a, b) => (a.metadata?.numberSort ?? a.number ?? 0) - (b.metada
 async function loadBook(id) {
   await downloads.load();
   const dl = downloads.get(id);
-  try {
-    const [book, pages] = await Promise.all([api.book(id), api.bookPages(id)]);
-    return { book, pages };
-  } catch (e) {
-    if (e instanceof api.OfflineError && dl?.pages) return { book: dl.book, pages: dl.pages };
-    throw e;
+  const local = dl?.status === 'done' && dl.pages ? { book: dl.book, pages: dl.pages } : null;
+  const remote = Promise.all([api.book(id), api.bookPages(id)]).then(([book, pages]) => ({ book, pages }));
+  if (!local) {
+    // Téléchargement incomplet : mieux que rien si le serveur ne répond pas.
+    return remote.catch((e) => { if (e instanceof api.OfflineError && dl?.pages) return { book: dl.book, pages: dl.pages }; throw e; });
   }
+  // Chapitre téléchargé : le serveur n'a que la progression à apporter. On lui laisse
+  // un court instant, puis on ouvre la copie de l'appareil sans attendre davantage.
+  remote.catch(() => {});
+  return Promise.race([remote, new Promise((resolve) => setTimeout(resolve, 1500, local))]).catch(() => local);
 }
 
 /** Chapitre voisin ; hors ligne, on se rabat sur les chapitres téléchargés de la série. */

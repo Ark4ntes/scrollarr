@@ -26,6 +26,7 @@ python tests/e2e_sync.py        # same-revision ties, skewed clocks, change duri
 node tests/unit_sync.mjs        # merge rules alone, no browser (instant)
 node tests/unit_contracts.mjs   # reader and collector contracts (instant)
 node tests/unit_tasks.mjs       # common task model (instant)
+python tests/e2e_offline.py     # downloaded chapters when the server hangs, is refused by a proxy, or there is no network (~40 s)
 python tests/e2e_tasks.py       # collector tasks: progress, failure, cancellation, history (~40 s)
 ```
 

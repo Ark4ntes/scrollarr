@@ -12,21 +12,37 @@ export class ApiError extends Error {
 export const events = new EventTarget();
 
 const down = new Set(); // identifiants des serveurs injoignables
+// Après un échec, inutile de refaire attendre chaque requête : pendant ce délai,
+// les demandes vers ce serveur échouent tout de suite et l'application passe
+// directement à ses copies locales. Les vérifications de session (probe) passent quand même.
+const failedAt = new Map();
+const BREAK_MS = 15000;
+const PROBE_TIMEOUT = 6000;
 export const isReachable = () => down.size === 0;
 export const isServerReachable = (serverId) => !down.has(serverId);
 function setReachable(serverId, ok) {
   const before = isReachable();
-  if (ok) down.delete(serverId); else down.add(serverId);
+  if (ok) { down.delete(serverId); failedAt.delete(serverId); } else { down.add(serverId); failedAt.set(serverId, Date.now()); }
   if (before !== isReachable()) events.dispatchEvent(new CustomEvent('reachable', { detail: isReachable() }));
 }
 /** Un serveur désactivé ne doit plus compter comme « injoignable ». */
 export const forgetServer = (serverId) => setReachable(serverId, true);
+/** Le réseau vient de changer : la prochaine requête retente sans attendre. */
+export const retryNow = () => failedAt.clear();
 
 /**
  * Requête HTTP vers un serveur placé derrière le proxy de même origine.
  * Renvoie la réponse brute : chaque connecteur l'interprète à sa façon.
  */
-export async function send(serverId, url, { method = 'GET', body, headers, timeout = 15000, keepalive } = {}) {
+export async function send(serverId, url, { method = 'GET', body, headers, timeout = 15000, keepalive, probe = false } = {}) {
+  if (probe) timeout = Math.min(timeout, PROBE_TIMEOUT);
+  // Appareil sans réseau, ou serveur qui vient de ne pas répondre : on n'attend pas.
+  else if (navigator.onLine === false || Date.now() - (failedAt.get(serverId) || 0) < BREAK_MS) {
+    const since = failedAt.get(serverId);
+    setReachable(serverId, false);
+    if (since) failedAt.set(serverId, since); else failedAt.delete(serverId); // le délai ne se prolonge pas tout seul
+    throw new OfflineError('Serveur injoignable');
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   let res;
@@ -53,6 +69,9 @@ export async function send(serverId, url, { method = 'GET', body, headers, timeo
   }
   // Le service worker ou le proxy répondent 502/503/504 quand le serveur est arrêté.
   if (res.status >= 502 && res.status <= 504) { setReachable(serverId, false); throw new OfflineError('Serveur injoignable'); }
+  // Un proxy placé devant Scrollarr qui refuse l'accès (hors du réseau autorisé) répond par une
+  // page HTML ; les serveurs, eux, répondent en JSON. On le traite comme un serveur injoignable.
+  if (res.status === 403 && (res.headers.get('Content-Type') || '').includes('text/html')) { setReachable(serverId, false); throw new OfflineError('Serveur injoignable'); }
   setReachable(serverId, true);
   return res;
 }

@@ -62,7 +62,12 @@ function paintBanner() {
   document.body.classList.toggle('is-offline', off);
 }
 api.events.addEventListener('reachable', (e) => { paintBanner(); if (e.detail) api.flushProgress(); });
-addEventListener('online', () => { paintBanner(); api.connect().then(() => api.flushProgress()).catch(() => {}); });
+const reconnect = () => { api.retryNow(); return api.connect().then(() => api.flushProgress()).catch(() => {}); };
+addEventListener('online', () => { paintBanner(); reconnect(); });
+// Serveur injoignable alors que l'appareil a du réseau (hors de chez soi, NAS arrêté) :
+// on revérifie au retour sur l'application, puis de temps en temps.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine && !api.isReachable()) reconnect(); });
+setInterval(() => { if (!document.hidden && navigator.onLine && !api.isReachable()) reconnect(); }, 30000);
 addEventListener('offline', paintBanner);
 
 api.events.addEventListener('unauthorized', () => {

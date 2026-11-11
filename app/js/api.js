@@ -9,10 +9,10 @@ import { CAP } from './connectors/contract.js';
 import { validateReader } from './connectors/reader-contract.js';
 import { validateCollector } from './connectors/collector-contract.js';
 import * as tasksModel from './tasks.js';
-import { events, isReachable, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
+import { events, isReachable, retryNow, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
 import { idb } from './idb.js';
 
-export { events, isReachable, AuthError, OfflineError, ApiError };
+export { events, isReachable, retryNow, AuthError, OfflineError, ApiError };
 
 const base = new URL('.', location.href).pathname;
 const PREFS_KEY = 'scrollarr.servers';     // { [id]: false } pour un serveur désactivé par l'utilisateur
