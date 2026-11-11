@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 fail=0
 files=$(find app/js dev -type f \( -name '*.js' -o -name '*.mjs' \) | sort)
-files="$files"$'\n'"app/sw.js"$'\n'"notifier/server.js"
+files="$files"$'\n'"app/sw.js"$'\n'"notifier/server.js"$'\n'"$(find folders -maxdepth 1 -name '*.js' | sort)"
 count=0
 for f in $files; do
   count=$((count + 1))

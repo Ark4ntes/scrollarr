@@ -26,6 +26,8 @@ jobs:
             context: .
           - name: scrollarr-notifier
             context: ./notifier
+          - name: scrollarr-folders
+            context: ./folders
     steps:
       - uses: actions/checkout@v4
 

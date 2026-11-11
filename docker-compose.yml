@@ -1,6 +1,7 @@
 # Scrollarr — lecteur vertical pour Suwayomi et Komga.
 #   docker compose up -d                  application seule
 #   docker compose --profile push up -d   application + notifications push
+#   docker compose --profile folders up -d   service Dossiers (en développement, pas encore relié à l'application)
 # Depuis un clone : « docker compose up -d --build » construit les images localement.
 # Pour développer l'application : « docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d »
 services:
@@ -35,8 +36,46 @@ services:
     volumes:
       - ./data/notifier:/data
 
+  # Service Dossiers : lit des dossiers de scans montés en lecture seule.
+  # Pas encore relié à l'application (étape C de READ-002). Aucun port publié.
+  # Le service refuse de démarrer sans FOLDERS_AUTH (« password » ou « none »),
+  # voir README.md. Dossier de données : « mkdir -p data/folders » puis donnez-le
+  # à l'utilisateur FOLDERS_UID:FOLDERS_GID (1000:1000 par défaut).
+  folders:
+    profiles: ["folders"]
+    image: ghcr.io/ark4ntes/scrollarr-folders:latest
+    build: ./folders
+    container_name: scrollarr-folders
+    restart: unless-stopped
+    user: "${FOLDERS_UID:-1000}:${FOLDERS_GID:-1000}"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 64
+    tmpfs: ["/tmp"]
+    networks: [folders_net]    # réseau interne dédié : pas de réseau par défaut, pas d'accès extérieur
+    environment:
+      FOLDERS_AUTH: ${FOLDERS_AUTH:-}
+      FOLDERS_USER: ${FOLDERS_USER:-}
+      FOLDERS_PASSWORD: ${FOLDERS_PASSWORD:-}
+      FOLDERS_TRUST_PROXY: "1"    # le seul client est le proxy de l'application
+      FOLDERS_COOKIE_PATH: /folders/
+    volumes:
+      # Une bibliothèque = un montage sous /libraries, toujours en lecture seule (:ro).
+      # Ajoutez une ligne par bibliothèque, sans sous-montage dans le dossier monté.
+      - ${FOLDERS_SCANS_PATH:-./scans}:/libraries/Scans:ro
+      - ./data/folders:/data
+
+# Réseau du service Dossiers. Il doit rester distinct de « default » et ne jamais
+# être « external » : voir le commentaire ci-dessous, qui ne le concerne pas.
+networks:
+  folders_net:
+    internal: true
+
 # Pour joindre les serveurs par leur nom de conteneur (http://suwayomi:4567,
-# http://komga:25600), rattachez ces services au réseau Docker de leur pile :
+# http://komga:25600), rattachez ces services au réseau Docker de leur pile
+# (ajoutez « default » sous la clé « networks » ci-dessus, sans toucher à folders_net) :
 #
 # networks:
 #   default:
