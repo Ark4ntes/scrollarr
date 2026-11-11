@@ -178,6 +178,15 @@ export function createHandler({ config, auth, libraries, reading, progress, vers
       return send(res, 200, bookDto(other, series, lib, recs?.get(other.id)));
     }
 
+    // ── Oubli de la progression d'un profil supprimé (la liste des profils est tenue par l'application) ──
+    if (req.method === 'DELETE' && (m = /^\/api\/v1\/profiles\/([^/]+)\/progress$/.exec(path))) {
+      await readJson(req);
+      // Le profil principal est l'historique commun : il ne se supprime pas, un identifiant mal formé n'est pas un profil.
+      if (!PROFILE.test(m[1]) || m[1] === MAIN) throw new HttpError(400, 'profil invalide');
+      await progress.forgetProfile(m[1]);
+      return send(res, 204, null);
+    }
+
     // ── Progression : écritures (PATCH / DELETE d'un chapitre, PUT / DELETE d'une série) ──
     if ((m = /^\/api\/v1\/books\/([^/]+)\/progress$/.exec(path)) && (req.method === 'PATCH' || req.method === 'DELETE')) {
       if (!isBookId(m[1])) throw new NotFound('identifiant inconnu');

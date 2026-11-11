@@ -215,6 +215,35 @@ test('no path leaks in what the progress routes answer', async () => {
   for (const text of texts) assert.ok(!text.includes(fx.libraries) && !text.includes(fx.data), text.slice(0, 80));
 });
 
+test('DELETE /profiles/{pid}/progress forgets one profile and nothing else, and frees its place', async () => {
+  const id = betaBooks[1].id;
+  await send('PATCH', `/api/v1/books/${id}/progress?profile=p3`, { page: 2 });
+  await send('PATCH', `/api/v1/books/${id}/progress?profile=p4`, { page: 1 });
+  const before = await api(`/api/v1/books/${id}?profile=p4`);
+  assert.equal((await api(`/api/v1/books/${id}?profile=p3`)).readProgress.page, 2);
+  assert.equal((await send('DELETE', '/api/v1/profiles/p3/progress')).status, 204);
+  assert.equal((await api(`/api/v1/books/${id}?profile=p3`)).readProgress, undefined);
+  assert.deepEqual((await api('/api/v1/books/recent?profile=p3')).content, []);
+  assert.deepEqual(await api(`/api/v1/books/${id}?profile=p4`), before, 'another profile is untouched');
+  assert.equal((await api(`/api/v1/books/${id}?profile=p1`)).readProgress.page, 2, 'so is p1 (profiles test)');
+  assert.equal((await send('DELETE', '/api/v1/profiles/p3/progress')).status, 204, 'idempotent');
+  await flush();
+  assert.ok(!readdirSync(join(fx.data, 'progress')).includes('p3'), 'the folder of the profile is gone');
+  assert.ok(readdirSync(join(fx.data, 'progress')).includes('p4'));
+});
+
+test('DELETE /profiles/{pid}/progress refuses main and malformed identifiers, and follows the write rules', async () => {
+  const main = (await api('/api/v1/books/recent')).content.length;
+  assert.ok(main > 0);
+  for (const pid of ['main', 'a'.repeat(33), 'p%2Fx', 'p.1']) assert.equal((await send('DELETE', `/api/v1/profiles/${pid}/progress`)).status, 400, pid);
+  assert.equal((await api('/api/v1/books/recent')).content.length, main, 'the main history is intact');
+  assert.equal((await request(app, 'DELETE', '/api/v1/profiles/p4/progress', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })).status, 415, 'JSON content type required');
+  assert.equal((await request(app, 'DELETE', '/api/v1/profiles/p4/progress', { headers: { 'Content-Type': 'application/json' } })).status, 403, 'X-Requested-With required');
+  assert.equal((await send('DELETE', '/api/v1/profiles/p4/progress', {}, { Origin: 'http://evil.example' })).status, 403, 'foreign Origin refused');
+  assert.equal((await get(app, '/api/v1/profiles/p4/progress')).status, 404, 'no GET route');
+  assert.equal((await api(`/api/v1/books/${betaBooks[1].id}?profile=p4`)).readProgress.page, 1, 'nothing was deleted by the refused calls');
+});
+
 test('(teardown) the main service stops', async () => { await app.close(); });
 
 // ── Mode password : les routes de progression exigent la session ──
@@ -226,7 +255,7 @@ const firstBook = (await get(secured, `/api/v1/series/${first.id}/books`, { Cook
 test('password mode: progress routes answer 401 without a session and work with one', async () => {
   const w = (method, path, headers = {}) => request(secured, method, path, { headers: { ...JSON_POST, ...headers }, body: { page: 1 } });
   for (const [method, path] of [['PATCH', `/api/v1/books/${firstBook.id}/progress`], ['DELETE', `/api/v1/books/${firstBook.id}/progress`],
-    ['PUT', `/api/v1/series/${first.id}/progress`], ['DELETE', `/api/v1/series/${first.id}/progress`]]) {
+    ['PUT', `/api/v1/series/${first.id}/progress`], ['DELETE', `/api/v1/series/${first.id}/progress`], ['DELETE', '/api/v1/profiles/p9/progress']]) {
     assert.equal((await w(method, path)).status, 401, `${method} ${path}`);
     assert.equal((await w(method, path, { Cookie: cookie })).status, 204, `${method} ${path} (session)`);
   }

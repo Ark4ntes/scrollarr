@@ -5,8 +5,8 @@
 // Ce que ce lecteur ne fait pas, volontairement (voir l'étude, §4.5) :
 //  - pas de `settings.store` : profils et abonnements restent chez les autres
 //    serveurs, ou sur l'appareil quand il n'y en a pas ;
-//  - la progression est enregistrée par le service (profil `main` tant que les profils
-//    par lecteur n'existent pas) ;
+//  - la progression est enregistrée par le service, et par profil (`chapter.progress.profiles`) :
+//    la façade indique le profil actif, que ce lecteur joint à chaque requête (`?profile=`) ;
 //  - pas de genres, de nouveautés, de « à suivre » : les listes correspondantes sont vides.
 import { send, cached, unauthorized, qs, AuthError, ApiError } from '../../net.js';
 import { idb } from '../../idb.js';
@@ -17,6 +17,7 @@ const SORTS = { title: 'metadata.titleSort,asc', updated: 'lastModified,desc', a
 
 export function createFolders({ base }) {
   const ID = 'folders';
+  let profile = null; // profil actif ; null = principal (pas de paramètre, le service prend `main`)
   let auth = null; // « password » ou « none », appris à la dernière vérification de session
 
   async function request(path, opts = {}) {
@@ -33,7 +34,7 @@ export function createFolders({ base }) {
   const read = (path, opts = {}) => cached(`${ID} ${opts.method || 'GET'} ${path}`, () => request(path, opts));
 
   async function sibling(id, dir) {
-    try { return await read(`/api/v1/books/${id}/${dir}`); }
+    try { return await read(`/api/v1/books/${id}/${dir}` + qs({ profile })); }
     catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; }
   }
 
@@ -46,7 +47,7 @@ export function createFolders({ base }) {
     code: 'f',
     label: t('Dossiers'),
     userLabel: 'Identifiant',
-    capabilities: [CAP.SERIES_LIST, CAP.SERIES_SEARCH, CAP.CHAPTER_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_READ, CAP.PROGRESS_WRITE],
+    capabilities: [CAP.SERIES_LIST, CAP.SERIES_SEARCH, CAP.CHAPTER_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_READ, CAP.PROGRESS_WRITE, CAP.PROGRESS_PROFILES],
 
     // ── Session ──
     // Mode « none » : aucune connexion à faire, le nom d'utilisateur reste vide
@@ -88,22 +89,22 @@ export function createFolders({ base }) {
     genres: async () => [],
 
     seriesList({ libraryId, readStatus, search, sort = 'title', page = 0, size = 30 } = {}) {
-      return read('/api/v1/series' + qs({ library: libraryId, status: readStatus, search, sort: SORTS[sort], page, size }));
+      return read('/api/v1/series' + qs({ library: libraryId, status: readStatus, search, sort: SORTS[sort], page, size, profile }));
     },
     seriesNew: async () => ({ content: [] }),
     // Séries dont le dossier a été modifié le plus récemment : de quoi remplir l'accueil sans rien mémoriser.
-    seriesUpdated: (size) => read('/api/v1/series' + qs({ sort: SORTS.updated, size })),
-    series: (id) => read(`/api/v1/series/${id}`),
+    seriesUpdated: (size) => read('/api/v1/series' + qs({ sort: SORTS.updated, size, profile })),
+    series: (id) => read(`/api/v1/series/${id}` + qs({ profile })),
     async seriesBooks(seriesId) {
-      return (await read(`/api/v1/series/${seriesId}/books`)).content;
+      return (await read(`/api/v1/series/${seriesId}/books` + qs({ profile }))).content;
     },
 
     booksLatest: async () => ({ content: [] }),
     booksOnDeck: async () => ({ content: [] }),
-    booksInProgress: (size) => read('/api/v1/books/inprogress' + qs({ size })),
-    booksRecentlyRead: (size) => read('/api/v1/books/recent' + qs({ size })),
+    booksInProgress: (size) => read('/api/v1/books/inprogress' + qs({ size, profile })),
+    booksRecentlyRead: (size) => read('/api/v1/books/recent' + qs({ size, profile })),
 
-    book: (id) => read(`/api/v1/books/${id}`),
+    book: (id) => read(`/api/v1/books/${id}` + qs({ profile })),
     async bookPages(id) {
       const pages = await read(`/api/v1/books/${id}/pages`);
       // Pas de dimensions (la hauteur s'ajuste à l'arrivée de l'image) ni de repli : les images sont servies telles quelles.
@@ -119,10 +120,15 @@ export function createFolders({ base }) {
     // ── Progression ──
     // Sans corps pour les routes qui n'en ont pas : request() en envoie un vide (Content-Type exigé par le service).
     saveProgress: (bookId, page, completed, { keepalive } = {}) =>
-      request(`/api/v1/books/${bookId}/progress`, { method: 'PATCH', body: { page, completed }, keepalive }),
-    markBookRead: (id) => request(`/api/v1/books/${id}/progress`, { method: 'PATCH', body: { completed: true } }),
-    markBookUnread: (id) => request(`/api/v1/books/${id}/progress`, { method: 'DELETE' }),
-    markSeriesRead: (id) => request(`/api/v1/series/${id}/progress`, { method: 'PUT' }),
-    markSeriesUnread: (id) => request(`/api/v1/series/${id}/progress`, { method: 'DELETE' }),
+      request(`/api/v1/books/${bookId}/progress` + qs({ profile }), { method: 'PATCH', body: { page, completed }, keepalive }),
+    markBookRead: (id) => request(`/api/v1/books/${id}/progress` + qs({ profile }), { method: 'PATCH', body: { completed: true } }),
+    markBookUnread: (id) => request(`/api/v1/books/${id}/progress` + qs({ profile }), { method: 'DELETE' }),
+    markSeriesRead: (id) => request(`/api/v1/series/${id}/progress` + qs({ profile }), { method: 'PUT' }),
+    markSeriesUnread: (id) => request(`/api/v1/series/${id}/progress` + qs({ profile }), { method: 'DELETE' }),
+
+    // ── Profils (chapter.progress.profiles) ──
+    // Le profil principal n'envoie rien : le service range sous `main` ce qui n'a pas de profil.
+    setProfile(id) { profile = !id || id === 'main' ? null : id; },
+    forgetProfile: (id) => request(`/api/v1/profiles/${encodeURIComponent(id)}/progress`, { method: 'DELETE' }),
   };
 }

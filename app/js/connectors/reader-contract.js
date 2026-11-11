@@ -15,11 +15,12 @@ const ALWAYS = [
 ];
 const WHEN = {
   [CAP.PROGRESS_WRITE]: ['saveProgress', 'markBookRead', 'markBookUnread', 'markSeriesRead', 'markSeriesUnread'],
+  [CAP.PROGRESS_PROFILES]: ['setProfile', 'forgetProfile'],
   [CAP.SETTINGS_STORE]: ['getSettings', 'setSetting', 'deleteSettings'],
 };
 const ALLOWED = [
   CAP.SERIES_LIST, CAP.SERIES_SEARCH, CAP.CHAPTER_LIST, CAP.CHAPTER_READ,
-  CAP.PROGRESS_READ, CAP.PROGRESS_WRITE, CAP.SETTINGS_STORE,
+  CAP.PROGRESS_READ, CAP.PROGRESS_WRITE, CAP.PROGRESS_PROFILES, CAP.SETTINGS_STORE,
 ];
 
 /**
@@ -28,6 +29,10 @@ const ALLOWED = [
  */
 export function validateReader(reader) {
   check('Lecteur', reader, { always: ALWAYS, when: WHEN, allowed: ALLOWED });
+  // Tenir la progression de chaque profil suppose de la lire et de l'écrire.
+  if (reader.capabilities.includes(CAP.PROGRESS_PROFILES) && !(reader.capabilities.includes(CAP.PROGRESS_READ) && reader.capabilities.includes(CAP.PROGRESS_WRITE))) {
+    throw new Error(`Lecteur ${reader.id} : « ${CAP.PROGRESS_PROFILES} » exige « ${CAP.PROGRESS_READ} » et « ${CAP.PROGRESS_WRITE} »`);
+  }
   // Le code sert de préfixe aux identifiants (« s:12.340 ») : une lettre, unique.
   if (!/^[a-z]$/.test(reader.code || '')) throw new Error(`Lecteur ${reader.id} : code attendu sous la forme d'une lettre minuscule`);
   return reader;

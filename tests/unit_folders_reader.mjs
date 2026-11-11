@@ -67,6 +67,34 @@ await test('progress: in-progress and recently-read lists, and the reading statu
   assert.deepEqual(calls.map((c) => c.url), ['/folders/api/v1/books/inprogress?size=12', '/folders/api/v1/books/recent?size=100',
     '/folders/api/v1/series?status=IN_PROGRESS&sort=metadata.titleSort%2Casc&page=0&size=5', '/folders/api/v1/series?sort=metadata.titleSort%2Casc&page=0&size=5']);
 });
+await test('profiles: it declares chapter.progress.profiles; a secondary profile is sent on every read and write, the main one never', async () => {
+  const r = reader();
+  assert.ok(r.capabilities.includes(CAP.PROGRESS_PROFILES));
+  assert.doesNotThrow(() => validateReader(r));
+  answer = () => json({ content: [] });
+  const all = async () => {
+    calls.length = 0;
+    await r.seriesList({ size: 5 }); await r.seriesUpdated(5); await r.series('s'); await r.seriesBooks('s'); await r.book('s.b');
+    await r.nextBook('s.b'); await r.previousBook('s.b'); await r.booksInProgress(5); await r.booksRecentlyRead(5);
+    answer = () => new Response(null, { status: 204 });
+    await r.saveProgress('s.b', 2, false); await r.markBookRead('s.b'); await r.markBookUnread('s.b'); await r.markSeriesRead('s'); await r.markSeriesUnread('s');
+    answer = () => json({ content: [] });
+    return calls.map((c) => c.url);
+  };
+  assert.ok((await all()).every((u) => !u.includes('profile=')), 'main: no parameter');
+  r.setProfile('p1');
+  const urls = await all();
+  assert.equal(urls.length, 14);
+  assert.ok(urls.every((u) => u.includes('profile=p1')), urls.filter((u) => !u.includes('profile=p1')).join(' '));
+  r.setProfile('main');
+  assert.ok((await all()).every((u) => !u.includes('profile=')), 'back to main: no parameter');
+});
+await test('profiles: forgetProfile deletes one profile on the service, with a JSON body', async () => {
+  answer = () => new Response(null, { status: 204 });
+  await reader().forgetProfile('p1');
+  assert.deepEqual([calls[0].method, calls[0].url], ['DELETE', '/folders/api/v1/profiles/p1/progress']);
+  assert.deepEqual(JSON.parse(calls[0].body), {});
+});
 await test('registered last, with a code no other reader uses', () => {
   const ids = READERS.map((r) => r.id);
   assert.equal(ids.at(-1), 'folders');

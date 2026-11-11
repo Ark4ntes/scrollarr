@@ -84,6 +84,9 @@ jobs:
       - name: E2E folders progress (real service, resume, restart, network cut, folders-only UI)
         if: ${{ !cancelled() }}
         run: python tests/e2e_folders_progress.py
+      - name: E2E folders profiles (real service next to Suwayomi, two devices, deletion)
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_folders_profiles.py
       - name: Upload screenshots
         if: failure()
         uses: actions/upload-artifact@v4

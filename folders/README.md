@@ -25,7 +25,7 @@ Les formes d'URL sont celles que reconnaissent déjà les expressions de `app/sw
 
 ## Progression (§4.4, §4.6)
 
-Modèle : un enregistrement par (profil, série, chapitre) : `{ page, completed, date, pages }`. Le profil est un identifiant opaque (`?profile=`, 1 à 32 lettres ou chiffres, `main` par défaut) : le service ne connaît ni les noms ni la liste des profils (50 profils distincts au plus). Les écritures exigent les mêmes garde-fous que toute requête non `GET` (`X-Requested-With`, `Content-Type: application/json`, `Origin`), corps de 64 Kio au plus ; en mode `password` toutes ces routes exigent la session.
+Modèle : un enregistrement par (profil, série, chapitre) : `{ page, completed, date, pages }`. Le profil est un identifiant opaque, celui que l'application donne au profil secondaire et que le connecteur joint à chaque requête de progression (`?profile=`, 1 à 32 lettres ou chiffres, `main` par défaut) : le service ne connaît ni les noms ni la liste des profils (50 profils distincts au plus). Les écritures exigent les mêmes garde-fous que toute requête non `GET` (`X-Requested-With`, `Content-Type: application/json`, `Origin`), corps de 64 Kio au plus ; en mode `password` toutes ces routes exigent la session.
 
 | Route | Effet |
 | --- | --- |
@@ -33,6 +33,7 @@ Modèle : un enregistrement par (profil, série, chapitre) : `{ page, completed,
 | `DELETE /api/v1/books/{bid}/progress` | Chapitre non lu (idempotent), 204. |
 | `PUT /api/v1/series/{sid}/progress` | Tous les chapitres lus, 204. Les chapitres déjà lus gardent leur date. |
 | `DELETE /api/v1/series/{sid}/progress` | Tous les chapitres non lus, 204. |
+| `DELETE /api/v1/profiles/{pid}/progress` | Oublie toute la progression d'un profil supprimé (204, idempotent) : son dossier disparaît et sa place est rendue (50 profils au plus). Le profil `main`, l'historique commun, est refusé (400), comme un identifiant mal formé. Appelée par l'application quand un profil est supprimé ; mêmes garde-fous et même session que toute écriture. |
 | `GET /api/v1/books/inprogress?size=` | Chapitres entamés et non terminés, du plus récent au plus ancien (`size` de 1 à 200, 20 par défaut). |
 | `GET /api/v1/books/recent?size=` | Tous les chapitres lus ou entamés, du plus récent au plus ancien. |
 | `GET /api/v1/series?status=UNREAD\|IN_PROGRESS\|READ` | Filtre d'état de lecture (autre valeur : 400), combinable avec `search`, `library`, le tri et la pagination. |

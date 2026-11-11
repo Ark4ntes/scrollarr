@@ -79,6 +79,7 @@ export async function remove(id) {
   localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
   await syncList({ write: true });
   await api.deleteDocs(prefix(id)).catch(() => {});
+  await api.forgetProfile(id).catch(() => {}); // Dossiers range la progression chez lui ; ce qui échoue est réessayé
   localStorage.removeItem(mirrorKey(id));
   localStorage.removeItem(`scrollarr.p.${id}.fav`);
   if (id === activeId) choose(MAIN);
@@ -275,6 +276,7 @@ export async function load() {
   try { await syncList({ write: false }); }
   catch { /* hors ligne, ou aucun profil créé : on garde la liste connue */ }
   if (!profiles.some((p) => p.id === activeId)) activeId = MAIN;
+  api.setProfile(activeId); // les lecteurs qui tiennent la progression par profil (Dossiers) en ont besoin avant toute lecture
   if (!isExtra()) { api.setOverlay(null); return; }
 
   const local = readJson(mirrorKey(), { docs: {}, dirty: [] });
