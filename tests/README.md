@@ -26,6 +26,7 @@ python tests/e2e_sync.py        # same-revision ties, skewed clocks, change duri
 node tests/unit_sync.mjs        # merge rules alone, no browser (instant)
 node tests/unit_contracts.mjs   # reader and collector contracts (instant)
 node tests/unit_tasks.mjs       # common task model (instant)
+python3 tests/nginx_headers.py # security headers on every nginx location, template rendered and run locally (needs nginx, curl; ~3 s)
 node tests/unit_facade.mjs      # facade with test-only readers, e.g. one without progress.write (instant)
 python tests/e2e_progress.py    # a reader that does not declare progress.write: no menu action, no request (~30 s)
 python tests/e2e_offline.py     # downloaded chapters when the server hangs, is refused by a proxy, or there is no network (~40 s)

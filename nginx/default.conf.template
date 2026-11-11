@@ -48,9 +48,15 @@ server {
     }
 
     # Serveurs configurés sur cette installation, lus par l'application au démarrage.
+    # Un add_header dans un location annule l'héritage de ceux du serveur
+    # (add_header_inherit n'existe qu'à partir de nginx 1.29.3, l'image est en 1.27) :
+    # les trois en-têtes de sécurité sont donc répétés ici (vérifié par tests/nginx_headers.py).
     location = /servers.json {
         default_type application/json;
         add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "same-origin" always;
+        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
         return 200 '{"komga":$komga_on,"suwayomi":$suwayomi_on}';
     }
 
