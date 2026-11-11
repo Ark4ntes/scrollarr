@@ -1,6 +1,6 @@
 // Unit tests for the merge rules (app/js/sync.js). Run with: node tests/unit_sync.mjs
 import assert from 'node:assert/strict';
-import { compareStamp, mergeSeries, mergeIdx, mergeFavs } from '../app/js/sync.js';
+import { compareStamp, mergeSeries, mergeIdx, mergeFavs, mergeProfiles } from '../app/js/sync.js';
 
 let failed = 0;
 function test(name, fn) {
@@ -92,6 +92,46 @@ test('subscriptions: lists saved before revisions existed are still read', () =>
   const old = { updatedAt: 3, items: { x: { id: 'x', title: 'X', seen: 2, added: 1 } } };
   assert.deepEqual(both(mergeFavs, old, null).items, old.items);
   assert.equal(both(mergeFavs, old, { items: { x: { id: 'x', del: 1, rev: 1, dev: 'a' } } }).items.x.del, 1);
+});
+
+// Profils : { id, name, added, rev, dev, del }
+const P = (id, name, rev, dev, extra = {}) => ({ id, name, added: Number(id.slice(1)) || 0, rev, dev, ...extra });
+const MAIN = { id: 'main', name: 'Principal' };
+const ids = (l) => l.map((p) => p.id + (p.del ? '!' : ''));
+
+test('profiles: a profile created elsewhere is not lost, whatever the order', () => {
+  const a = [MAIN, P('p1', 'Duo', 1, 'a')];
+  const b = [MAIN];                                   // serveur en retard
+  assert.deepEqual(ids(both(mergeProfiles, a, b)), ['main', 'p1']);
+  assert.deepEqual(ids(both(mergeProfiles, [MAIN, P('p1', 'Duo', 1, 'a')], [MAIN, P('p2', 'Trio', 1, 'b')])), ['main', 'p1', 'p2']);
+});
+test('profiles: a deletion stays deleted against a stale copy', () => {
+  const gone = [MAIN, P('p1', 'Duo', 2, 'a', { del: 1 })];
+  const stale = [MAIN, P('p1', 'Duo', 1, 'a')];
+  assert.deepEqual(ids(both(mergeProfiles, gone, stale)), ['main', 'p1!']);
+});
+test('profiles: a rename made after another device wins by revision, not by arrival order', () => {
+  const x = [MAIN, P('p1', 'Duo', 2, 'a')];
+  const y = [MAIN, P('p1', 'Autre', 1, 'b')];
+  assert.equal(both(mergeProfiles, x, y)[1].name, 'Duo');
+});
+test('profiles: same revision on two devices gives the same result everywhere', () => {
+  const m = both(mergeProfiles, [MAIN, P('p1', 'A', 1, 'a')], [MAIN, P('p1', 'B', 1, 'b')]);
+  assert.equal(m[1].dev, 'b');
+});
+test('profiles: lists written before stamps still load and are completed by stamped ones', () => {
+  const old = [{ id: 'main', name: 'Principal' }, { id: 'p1', name: 'Duo' }, { id: 'p2', name: 'Trio' }];
+  assert.deepEqual(ids(mergeProfiles(old, null)), ['main', 'p1', 'p2']);                       // ordre conservé
+  assert.deepEqual(ids(both(mergeProfiles, old, [MAIN, P('p1', 'Duo', 2, 'a', { del: 1, added: 0 })])), ['main', 'p1!', 'p2']);
+  assert.equal(both(mergeProfiles, old, [MAIN, P('p2', 'Renommé', 1, 'a')])[2].name, 'Renommé');
+});
+test('profiles: the main profile cannot be deleted and garbage entries are ignored', () => {
+  const m = mergeProfiles([{ id: 'main', name: 'Principal', rev: 5, dev: 'a', del: 1 }, null, { name: 'sans id' }, 'x'], undefined);
+  assert.deepEqual(m.map((p) => [p.id, !!p.del]), [['main', false]]);
+});
+test('profiles: tombstone beats an unstamped live copy of equal revision', () => {
+  const m = both(mergeProfiles, [MAIN, { id: 'p1', name: 'Duo' }], [MAIN, { id: 'p1', name: 'Duo', del: 1 }]);
+  assert.ok(m[1].del);
 });
 
 console.log(failed ? `\n${failed} test(s) failed` : '\nAll sync unit tests passed');

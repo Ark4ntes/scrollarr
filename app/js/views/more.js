@@ -120,7 +120,11 @@ export async function more(root) {
     topbar(t('Réglages'), { large: true }),
     serversPanel(),
     collectPanel,
-    h('section.panel',
+    !api.hasStore() && profiles.list().length <= 1
+      ? h('section.panel',
+        h('h2', t('Profil')),
+        h('p.note', t('Les profils ne sont pas disponibles avec ce serveur. Les abonnements restent sur cet appareil.')))
+      : h('section.panel',
       h('h2', t('Profil')),
       h('p.note', profiles.list().length > 1
         ? t('Profil ouvert sur cet appareil : {name}.', { name: profiles.active().name })

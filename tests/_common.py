@@ -1,5 +1,5 @@
 """Shared helpers for the end-to-end scripts (Playwright sync API + demo servers)."""
-import os, pathlib, socket, subprocess, sys, time, traceback
+import os, pathlib, shutil, signal, socket, subprocess, sys, tempfile, time, traceback
 from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -41,6 +41,52 @@ def stop(p):
     p.wait()
 
 
+def terminate(p):
+    """Graceful stop (SIGTERM): the folders service flushes its reading progress before exiting."""
+    p.send_signal(signal.SIGTERM)
+    p.wait(timeout=15)
+
+
+def _wait_port(p, port, what):
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        if p.poll() is not None:
+            raise RuntimeError(f'{what} on port {port} exited early (code {p.returncode})')
+        try:
+            socket.create_connection(('127.0.0.1', port), timeout=0.3).close()
+            return
+        except OSError:
+            time.sleep(0.1)
+    raise RuntimeError(f'{what} on port {port} did not start')
+
+
+_tmpdirs = []
+
+
+def folders_fixture(page='360x540'):
+    """Generated library for the folders service (nothing binary in the repository). Returns the fixture root."""
+    root = tempfile.mkdtemp(prefix='scrollarr-folders-')
+    _tmpdirs.append(root)
+    subprocess.run(['node', 'dev/make-folders-fixture.mjs', root, '--page', page], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    return root
+
+
+FOLDERS_PASSWORD = 'mot-de-passe-de-test'
+
+
+def folders_service(port, root, auth='none', **env):
+    """Start the real folders service on the fixture; killed by cleanup() whatever happens.
+    The same data folder can be reused after a stop to test a restart."""
+    e = dict(os.environ, FOLDERS_AUTH=auth, FOLDERS_LIBRARIES_DIR=f'{root}/libraries', FOLDERS_DATA_DIR=f'{root}/data',
+             FOLDERS_PORT=str(port), FOLDERS_TRUST_PROXY='1', FOLDERS_COOKIE_PATH='/folders/', **env)
+    if auth == 'password':
+        e.update(FOLDERS_USER='lecteur', FOLDERS_PASSWORD=FOLDERS_PASSWORD)
+    p = subprocess.Popen(['node', 'folders/server.js'], cwd=ROOT, env=e, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    _procs.append(p)
+    _wait_port(p, port, 'folders service')
+    return p
+
+
 def cleanup():
     for p in _procs:
         if p.poll() is None:
@@ -50,6 +96,9 @@ def cleanup():
         except Exception:
             pass
     _procs.clear()
+    for d in _tmpdirs:
+        shutil.rmtree(d, ignore_errors=True)
+    _tmpdirs.clear()
 
 
 def check(name, cond, extra=''):

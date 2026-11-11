@@ -47,6 +47,7 @@ async function recent(body) {
 }
 
 async function subscriptions(body) {
+  if (!api.hasStore()) add(body, h('p.note', t('Sur cette installation, les abonnements restent sur cet appareil.')));
   if (!store.favorites().length) {
     add(body, emptyState(t('Aucun abonnement'),
       t('Abonnez-vous à une série depuis sa fiche : ses nouveaux chapitres seront signalés ici.'),

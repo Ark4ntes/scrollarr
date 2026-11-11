@@ -72,7 +72,8 @@ export function resumeCard(b) {
       h('p.resume-series', b.seriesTitle),
       h('p.resume-chapter', t('Chapitre {n}', { n: chapterNo(b) })),
       h('div.meter', { role: 'img', 'aria-label': t('{n} % lu', { n: pct }) }, h('i', { style: { width: pct + '%' } })),
-      h('p.resume-state', pct > 0 ? pageOf(b) : t('Pas encore commencé'))));
+      // Un chapitre entamé dont le total de pages est encore inconnu (archive jamais rouverte) n'est pas « pas encore commencé ».
+      h('p.resume-state', pct > 0 || (b.readProgress && !b.media?.pagesCount) ? pageOf(b) : t('Pas encore commencé'))));
 }
 
 /** Rangée horizontale titrée. */

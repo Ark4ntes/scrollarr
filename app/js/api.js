@@ -95,6 +95,13 @@ export async function test(serverId) {
   return { state: s.state, ms: Math.round(performance.now() - start) };
 }
 export const multi = () => active().length > 1;
+/**
+ * Vrai si un serveur activé sait ranger profils et abonnements (`settings.store`), même momentanément injoignable :
+ * sans lui (installation « Dossiers » seule), ils restent sur cet appareil et l'écran ne propose pas de les gérer.
+ */
+export const hasStore = () => servers.some((s) => s.enabled && s.c.capabilities.includes(CAP.SETTINGS_STORE));
+/** Vrai si chaque serveur utilisé sait dire où en est la lecture d'une série (filtre « Lecture » de la bibliothèque). */
+export const canFilterByStatus = () => active().every((c) => c.capabilities.includes(CAP.PROGRESS_READ));
 /** Change dès que l'ensemble des serveurs utilisés (ou la règle des doublons) change. */
 export const signature = () => active().map((c) => c.id).join('+') + (dedupe() ? '' : '+all');
 /** Vrai si l'identifiant appartient à un serveur actuellement utilisable. */
@@ -161,9 +168,20 @@ function route(id) {
 let overlay = null;
 export function setOverlay(o) { overlay = o; merged.clear(); }
 
+// Un lecteur « chapter.progress.profiles » tient lui-même la progression de chaque profil : on lui dit quel profil est
+// ouvert, et la surcouche ne s'applique pas à ses chapitres (Suwayomi et Komga, eux, passent toujours par elle).
+const keeps = (c) => c.capabilities.includes(CAP.PROGRESS_PROFILES);
+const overlaid = (c) => !!overlay && !keeps(c);
+let profileId = 'main';
+export function setProfile(id) {
+  profileId = id || 'main';
+  for (const s of servers) if (keeps(s.c)) s.c.setProfile(profileId);
+  merged.clear();
+}
+
 function tagSeries(c, s) {
   const out = { ...s, id: pid(c, s.id), libraryId: pid(c, s.libraryId), server: c.id };
-  if (overlay) {
+  if (overlaid(c)) {
     const st = overlay.seriesStats(out.id);
     out.booksReadCount = Math.min(out.booksCount, st.read);
     out.booksInProgressCount = st.inProgress;
@@ -174,7 +192,7 @@ function tagSeries(c, s) {
 function tagBook(c, b) {
   if (!b) return b;
   const out = { ...b, id: pid(c, b.id), seriesId: pid(c, b.seriesId), libraryId: pid(c, b.libraryId), server: c.id };
-  if (overlay) out.readProgress = overlay.progressOf(out.id);
+  if (overlaid(c)) out.readProgress = overlay.progressOf(out.id);
   return out;
 }
 const statusOf = (s) => (s.booksCount > 0 && s.booksReadCount >= s.booksCount ? 'READ'
@@ -288,14 +306,26 @@ export async function booksOnDeck(size = 20) {
   const next = await Promise.all(last.filter((b) => b.readProgress.completed).slice(0, 8).map((b) => nextBook(b.id).catch(() => null)));
   return { content: next.filter((b) => b && !b.readProgress).slice(0, size) };
 }
+/**
+ * Profil secondaire : ce que la surcouche sait (Suwayomi, Komga) plus ce que les lecteurs qui tiennent eux-mêmes
+ * la progression de ce profil répondent, du plus récent au plus ancien. Un de ces lecteurs injoignable ne vide pas le reste.
+ */
+async function overlayBooks(method, size, own) {
+  const owners = active().filter(keeps);
+  const parts = owners.length ? await Promise.allSettled(owners.map((c) => c[method](size))) : [];
+  const hide = owners.length ? await shadows().catch(() => new Map()) : new Map();
+  const theirs = parts.flatMap((r, i) => (r.status === 'fulfilled'
+    ? r.value.content.filter((b) => kept(hide, owners[i], b.seriesTitle)).map((b) => tagBook(owners[i], b)) : []));
+  return { content: [...own, ...theirs].sort(byDateDesc((b) => b.readProgress?.readDate)).slice(0, size) };
+}
 export async function booksInProgress(size = 20) {
   if (!overlay) return mergedBooks('booksInProgress', size, (b) => b.readProgress?.readDate);
-  return { content: overlay.recent().filter((b) => reachable(b.id) && !b.readProgress.completed).slice(0, size) };
+  return overlayBooks('booksInProgress', size, overlay.recent().filter((b) => reachable(b.id) && !b.readProgress.completed));
 }
 /** Derniers chapitres ouverts (en cours ou terminés), du plus récent au plus ancien. */
 export async function booksRecentlyRead(size = 100) {
   if (!overlay) return mergedBooks('booksRecentlyRead', size, (b) => b.readProgress?.readDate);
-  return { content: overlay.recent().filter((b) => reachable(b.id)).slice(0, size) };
+  return overlayBooks('booksRecentlyRead', size, overlay.recent().filter((b) => reachable(b.id)));
 }
 
 export async function book(id) { const [c, raw] = route(id); return tagBook(c, await c.book(raw)); }
@@ -315,20 +345,26 @@ export function bookThumb(id) { const c = find(id); return c.bookThumb(rawId(c, 
 const QUEUE_KEY = 'scrollarr.progressQueue';
 const readQueue = () => readJson(QUEUE_KEY, {});
 const writeQueue = (q) => localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+// Une progression en attente pour un lecteur qui tient celle de chaque profil appartient au profil qui l'a faite :
+// « idChapitre@profil » pour un profil secondaire, « idChapitre » pour le principal (et pour tous les autres lecteurs).
+const queueKey = (bookId) => (profileId !== 'main' && keeps(find(bookId)) ? `${bookId}@${profileId}` : bookId);
 
 /**
  * Enregistre la page courante. Hors ligne, la mise à jour est mise en file et
  * renvoyée au serveur dès qu'il redevient joignable.
  */
 export async function saveProgress(bookId, page, completed, { keepalive = false, book: known } = {}) {
-  if (overlay) {
+  // Lecteur sans « chapter.progress.write » : on lit, mais rien n'est enregistré (ni file, ni profil).
+  if (!can(bookId, CAP.PROGRESS_WRITE)) return true;
+  if (overlaid(find(bookId))) {
     overlay.record(known || (await book(bookId)), page, completed, { now: keepalive });
     return true;
   }
+  const key = queueKey(bookId);
   const q = readQueue();
-  q[bookId] = { page, completed, t: Date.now() };
+  q[key] = { page, completed, t: Date.now() };
   writeQueue(q);
-  const settle = () => { const now = readQueue(); if (now[bookId]?.t === q[bookId].t) { delete now[bookId]; writeQueue(now); } };
+  const settle = () => { const now = readQueue(); if (now[key]?.t === q[key].t) { delete now[key]; writeQueue(now); } };
   try {
     const [c, raw] = route(bookId);
     await c.saveProgress(raw, page, completed, { keepalive });
@@ -343,25 +379,55 @@ export async function saveProgress(bookId, page, completed, { keepalive = false,
   }
 }
 
-export const pendingProgress = (bookId) => (overlay ? undefined : readQueue()[bookId]);
+export const pendingProgress = (bookId) => (overlaid(find(bookId)) ? undefined : readQueue()[queueKey(bookId)]);
 
 export async function flushProgress() {
   if (overlay) await overlay.flush().catch(() => {});
-  for (const [bookId, p] of Object.entries(readQueue())) {
+  for (const [key, p] of Object.entries(readQueue())) {
+    const [bookId, owner = 'main'] = key.split('@');
+    if (owner !== profileId) continue; // la progression d'un autre profil attend que ce profil soit ouvert
     const ok = await saveProgress(bookId, p.page, p.completed).catch(() => true);
     if (!ok) break;
   }
+  await retryForgets();
+}
+
+// ───────────── Oubli de la progression d'un profil supprimé ─────────────
+
+const FORGET_KEY = 'scrollarr.forgetProfile'; // { idProfil: [idLecteur, …] } : ce qu'un lecteur injoignable n'a pas encore oublié
+/** Demande à chaque lecteur qui tient la progression par profil de l'oublier ; ce qui échoue est réessayé plus tard. */
+export async function forgetProfile(id) {
+  const todo = readJson(FORGET_KEY, {});
+  todo[id] = servers.filter((s) => s.available && keeps(s.c)).map((s) => s.c.id);
+  localStorage.setItem(FORGET_KEY, JSON.stringify(todo));
+  await retryForgets();
+}
+async function retryForgets() {
+  const todo = readJson(FORGET_KEY, {});
+  for (const [id, readers] of Object.entries(todo)) {
+    const left = [];
+    for (const rid of readers) {
+      const s = servers.find((x) => x.c.id === rid);
+      if (!s) continue;
+      try { await s.c.forgetProfile(id); }
+      // Route inconnue ou refusée pour de bon (service plus ancien) : inutile d'insister ; sinon, plus tard.
+      catch (e) { if (!(e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 401 && e.status !== 408 && e.status !== 429)) left.push(rid); }
+    }
+    if (left.length) todo[id] = left; else delete todo[id];
+  }
+  localStorage.setItem(FORGET_KEY, JSON.stringify(todo));
 }
 
 function changing(method) {
   return async (id) => {
     const [c, raw] = route(id);
-    if (!overlay) await c[method](raw);
+    if (!c.capabilities.includes(CAP.PROGRESS_WRITE)) return; // rien à enregistrer pour ce lecteur
+    if (!overlaid(c)) await c[method](raw);
     else if (method === 'markBookRead') { const b = await book(id); overlay.record(b, b.media?.pagesCount || 1, true, { quiet: true }); }
     else if (method === 'markBookUnread') overlay.forget([await book(id)]);
     else if (method === 'markSeriesRead') (await seriesBooks(id)).forEach((b) => overlay.record(b, b.media?.pagesCount || 1, true, { quiet: true }));
     else overlay.forget(await seriesBooks(id));
-    if (overlay) await overlay.flush().catch(() => {}); // hors ligne : renvoyé plus tard
+    if (overlaid(c)) await overlay.flush().catch(() => {}); // hors ligne : renvoyé plus tard
     merged.clear();
   };
 }

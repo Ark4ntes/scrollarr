@@ -1,14 +1,18 @@
 # Scrollarr : fichiers statiques + proxys de même origine vers les serveurs.
-# ${KOMGA_URL} et ${SUWAYOMI_URL} sont remplacés au démarrage du conteneur
-# (mécanisme « templates » de l'image nginx officielle). Les deux variables
-# doivent exister dans l'environnement, quitte à être vides : un serveur dont
-# l'adresse est vide est simplement absent de l'application.
+# ${KOMGA_URL}, ${SUWAYOMI_URL} et ${FOLDERS_URL} sont remplacés au démarrage
+# du conteneur (mécanisme « templates » de l'image nginx officielle). Les trois
+# variables doivent exister dans l'environnement, quitte à être vides : un
+# serveur dont l'adresse est vide est simplement absent de l'application.
 
 map "${KOMGA_URL}" $komga_on {
     ""      "false";
     default "true";
 }
 map "${SUWAYOMI_URL}" $suwayomi_on {
+    ""      "false";
+    default "true";
+}
+map "${FOLDERS_URL}" $folders_on {
     ""      "false";
     default "true";
 }
@@ -48,10 +52,16 @@ server {
     }
 
     # Serveurs configurés sur cette installation, lus par l'application au démarrage.
+    # Un add_header dans un location annule l'héritage de ceux du serveur
+    # (add_header_inherit n'existe qu'à partir de nginx 1.29.3, l'image est en 1.27) :
+    # les trois en-têtes de sécurité sont donc répétés ici (vérifié par tests/nginx_headers.py).
     location = /servers.json {
         default_type application/json;
         add_header Cache-Control "no-store" always;
-        return 200 '{"komga":$komga_on,"suwayomi":$suwayomi_on}';
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "same-origin" always;
+        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+        return 200 '{"komga":$komga_on,"suwayomi":$suwayomi_on,"folders":$folders_on}';
     }
 
     # Chaque serveur est placé sous la même origine que l'application : ses
@@ -83,6 +93,25 @@ server {
         proxy_hide_header WWW-Authenticate;
         # Un chapitre non téléchargé est d'abord récupéré chez la source : cela peut être long.
         proxy_read_timeout 180s;
+    }
+
+    # Service Dossiers (facultatif, profil « folders » de docker-compose). Pas d'add_header ici :
+    # le location hérite ainsi des trois en-têtes de sécurité du serveur (vérifié par tests/nginx_headers.py).
+    # Host est transmis tel que le navigateur l'a envoyé : le service le compare à l'en-tête Origin des
+    # requêtes d'écriture. X-Forwarded-For : sa dernière entrée est l'adresse vue par ce proxy (limitation des tentatives).
+    location ~ ^/folders/(?<folders_path>.*)$ {
+        if ($folders_on = "false") { return 404; }
+        set $folders "${FOLDERS_URL}";
+        proxy_pass $folders/$folders_path$is_args$args;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        proxy_hide_header WWW-Authenticate;
+        # Le service ajoute déjà ce même en-tête : une seule copie.
+        proxy_hide_header X-Content-Type-Options;
+        proxy_read_timeout 60s;
     }
 
     # Notifications push (service facultatif, profil « push » de docker-compose).

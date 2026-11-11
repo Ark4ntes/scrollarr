@@ -19,9 +19,26 @@ const reader = (extra = {}) => ({
 const collector = (extra = {}) => ({ id: 'demo', label: 'Demo', capabilities: [CAP.COLLECT_CHAPTERS], serves: ['demo'], session: 'demo', collectChapters: fn, ...extra });
 
 test('a complete reader is accepted', () => assert.ok(validateReader(reader())));
+test('a reader without progress.write is supported (reading only, no progress methods required)', () =>
+  assert.ok(validateReader(reader({ capabilities: [CAP.SERIES_LIST, CAP.CHAPTER_READ] }))));
 test('a reader missing a method is refused', () => assert.throws(() => validateReader(reader({ bookPages: undefined })), /bookPages/));
 test('a reader declaring progress.write must provide the methods', () =>
   assert.throws(() => validateReader(reader({ capabilities: [CAP.PROGRESS_WRITE] })), /saveProgress/));
+const progress = ['saveProgress', 'markBookRead', 'markBookUnread', 'markSeriesRead', 'markSeriesUnread'];
+const full = [CAP.SERIES_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_READ, CAP.PROGRESS_WRITE, CAP.PROGRESS_PROFILES];
+const withProgress = Object.fromEntries(progress.map((m) => [m, fn]));
+test('chapter.progress.profiles needs setProfile() and forgetProfile()', () => {
+  assert.throws(() => validateReader(reader({ capabilities: full, ...withProgress })), /setProfile/);
+  assert.throws(() => validateReader(reader({ capabilities: full, ...withProgress, setProfile: fn })), /forgetProfile/);
+  assert.ok(validateReader(reader({ capabilities: full, ...withProgress, setProfile: fn, forgetProfile: fn })));
+});
+test('chapter.progress.profiles needs progress.read and progress.write', () => {
+  const both = { ...withProgress, setProfile: fn, forgetProfile: fn };
+  assert.throws(() => validateReader(reader({ capabilities: [CAP.SERIES_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_PROFILES], ...both })), /chapter\.progress\.read/);
+  assert.throws(() => validateReader(reader({ capabilities: [CAP.SERIES_LIST, CAP.CHAPTER_READ, CAP.PROGRESS_READ, CAP.PROGRESS_PROFILES], ...both })), /chapter\.progress\.write/);
+});
+test('a collector cannot declare chapter.progress.profiles', () =>
+  assert.throws(() => validateCollector(collector({ capabilities: [CAP.PROGRESS_PROFILES] }), ['demo']), /chapter\.progress\.profiles/));
 test('a reader cannot declare a collector capability', () =>
   assert.throws(() => validateReader(reader({ capabilities: [CAP.COLLECT_CHAPTERS] })), /collect\.chapters/));
 test('a reader needs a one-letter code', () => assert.throws(() => validateReader(reader({ code: 'xx' })), /code/));

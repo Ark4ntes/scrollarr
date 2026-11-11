@@ -1,0 +1,12 @@
+{
+  "name": "scrollarr-folders",
+  "version": "0.1.0",
+  "description": "Service de lecture de dossiers de scans pour Scrollarr (étapes A et B : socle, parcours, lecture des pages)",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "yauzl": "3.4.0" }
+}

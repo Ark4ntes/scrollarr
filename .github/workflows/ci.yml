@@ -24,6 +24,16 @@ jobs:
         run: node tests/unit_contracts.mjs
       - name: Task model (unit)
         run: node tests/unit_tasks.mjs
+      - name: Facade (unit)
+        run: node tests/unit_facade.mjs
+      - name: Profiles (unit)
+        run: node tests/unit_profiles.mjs
+      - name: Subscriptions (unit)
+        run: node tests/unit_store.mjs
+      - name: Security headers (nginx)
+        run: |
+          command -v nginx >/dev/null || sudo apt-get install -y --no-install-recommends nginx-light
+          python3 tests/nginx_headers.py
 
   e2e:
     name: e2e
@@ -45,6 +55,9 @@ jobs:
         run: |
           pip install -r tests/requirements.txt
           python -m playwright install --with-deps chromium
+      - name: Folders dependencies (locked; the folders e2e suites start the real service)
+        run: npm ci --omit=dev --no-audit --no-fund
+        working-directory: folders
       - name: E2E servers
         run: python tests/e2e_servers.py
       - name: E2E profiles
@@ -59,9 +72,21 @@ jobs:
       - name: E2E collector tasks
         if: ${{ !cancelled() }}
         run: python tests/e2e_tasks.py
+      - name: E2E reader without progress
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_progress.py
       - name: E2E unreachable server
         if: ${{ !cancelled() }}
         run: python tests/e2e_offline.py
+      - name: E2E folders reader (real service, none and password modes, offline, next to Suwayomi)
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_folders.py
+      - name: E2E folders progress (real service, resume, restart, network cut, folders-only UI)
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_folders_progress.py
+      - name: E2E folders profiles (real service next to Suwayomi, two devices, deletion)
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_folders_profiles.py
       - name: Upload screenshots
         if: failure()
         uses: actions/upload-artifact@v4
@@ -69,3 +94,53 @@ jobs:
           name: e2e-screenshots
           path: /tmp/scrollarr-shots
           if-no-files-found: ignore
+
+  folders:
+    name: folders
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Folders dependencies (locked)
+        run: npm ci --omit=dev --no-audit --no-fund
+        working-directory: folders
+      - name: Folders naming (unit)
+        run: node tests/unit_folders_naming.mjs
+      - name: Folders ids and confinement (unit)
+        run: node tests/unit_folders_ids.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders configuration (unit)
+        run: node tests/unit_folders_config.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders authentication and cross-origin guards (unit)
+        run: node tests/unit_folders_auth.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders library index (unit)
+        run: node tests/unit_folders_library.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders structure over HTTP (integration)
+        run: node tests/integration_folders.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders archives and image types (unit)
+        run: node tests/unit_folders_archive.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders pages and covers over HTTP (integration)
+        run: node tests/integration_folders_pages.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders invalidation (integration)
+        run: node tests/integration_folders_invalidation.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders progress (store)
+        run: node tests/unit_folders_progress.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders progress (integration)
+        run: node tests/integration_folders_progress.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders reader in the app (unit)
+        run: node tests/unit_folders_reader.mjs
+        if: ${{ !cancelled() }}
+      - name: Folders container (read-only mounts, health)
+        run: tests/container_folders.sh
+        if: ${{ !cancelled() }}

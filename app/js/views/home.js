@@ -31,7 +31,7 @@ export async function home(root) {
 
   if (!resume.length && !latest.length && !fresh.length && !updated.length) {
     add(root, emptyState(t('La bibliothèque est vide'),
-      t('Ajoutez des séries dans Komga : elles apparaîtront ici après le prochain scan.')));
+      t('Ajoutez des séries sur votre serveur : elles apparaîtront ici après le prochain scan.')));
     return;
   }
 

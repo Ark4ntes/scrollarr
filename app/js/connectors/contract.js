@@ -20,6 +20,11 @@ export const CAP = Object.freeze({
   CHAPTER_READ: 'chapter.read',
   PROGRESS_READ: 'chapter.progress.read',
   PROGRESS_WRITE: 'chapter.progress.write',
+  /**
+   * Le serveur tient lui-même la progression de chaque profil (méthodes `setProfile` et `forgetProfile`) : la façade
+   * lui indique le profil actif et ne lui applique pas la surcouche des profils secondaires. Exige les deux capacités de progression.
+   */
+  PROGRESS_PROFILES: 'chapter.progress.profiles',
   /** Petit stockage clé-valeur côté serveur : abonnements et profils y sont rangés. */
   SETTINGS_STORE: 'settings.store',
   // ── Collecteurs ──

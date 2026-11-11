@@ -17,6 +17,7 @@ export async function library(root) {
   // Un filtre mémorisé peut viser un serveur qui n'est plus utilisé.
   if (state.libraryId && !libs.some((l) => l.id === state.libraryId)) state.libraryId = '';
   if (state.genre && !genreList.includes(state.genre)) state.genre = '';
+  if (state.status && !api.canFilterByStatus()) state.status = '';
   // Avec plusieurs serveurs, deux bibliothèques peuvent porter le même nom.
   const libName = (l) => (api.multi() ? `${l.name} (${api.serverLabel(l.id)})` : l.name);
   const grid = h('div.grid');
@@ -71,8 +72,11 @@ export async function library(root) {
     h('div.filters',
       select(t('Tri'), [['title', t('De A à Z')], ['updated', t('Mises à jour récentes')], ['added', t('Ajouts récents')]], state.sort,
         (v) => { state.sort = v; reset(); }),
-      select(t('Lecture'), [['', t('Lues et non lues')], ['UNREAD', t('Non commencées')], ['IN_PROGRESS', t('En cours')], ['READ', t('Terminées')]], state.status,
-        (v) => { state.status = v; reset(); }),
+      // Un serveur qui ne suit pas la lecture ne peut pas filtrer : on ne propose pas un filtre qu'il ignorerait.
+      api.canFilterByStatus()
+        ? select(t('Lecture'), [['', t('Lues et non lues')], ['UNREAD', t('Non commencées')], ['IN_PROGRESS', t('En cours')], ['READ', t('Terminées')]], state.status,
+          (v) => { state.status = v; reset(); })
+        : null,
       genreList.length
         ? select(t('Genre'), [['', t('Tous les genres')], ...genreList.map((g) => [g, g])], state.genre, (v) => { state.genre = v; reset(); })
         : null),
