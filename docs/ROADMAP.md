@@ -1,6 +1,6 @@
 # Scrollarr — Roadmap produit & plan technique
 
-> **Document de pilotage — version 1.0 — 10 novembre 2026**
+> **Document de pilotage — version 1.1 — 11 novembre 2026**
 > Projet : [Ark4ntes/scrollarr](https://github.com/Ark4ntes/scrollarr)
 > Vision : lecteur manga/comics auto-hébergé, multi-serveurs, avec
 > collecte intégrée et applications iOS/Android.
@@ -15,7 +15,8 @@ Ce document décrit une cible. Voici où en est réellement le dépôt.
 | CONN-005 | Fait | Activation, désactivation, priorité, état et bouton « Tester » par serveur |
 | CONN-006 | Fait | Une panne d'un serveur ne bloque pas les autres |
 | SYNC-001, SYNC-002 | Fait | Fusion entrée par entrée avec révision et identifiant d'appareil (progression, historique, abonnements) |
-| QA-001, QA-002, DEV-001 | Fait | Tests de bout en bout et unitaires exécutés par GitHub Actions ; faux serveurs dans `dev/` |
+| QA-001, QA-002, QA-003, DEV-001 | Fait | CI et tests automatisés ; validation fonctionnelle sur les serveurs réels déjà effectuée (lecture, progression et parcours existants) |
+| QA-004 | À faire | Validation réelle du cycle de vie des tâches Suwayomi : file, progression, échec, annulation, relance et reconnexion |
 | DEV-002, OPS-002 | Fait | Image Docker et contrôles de santé |
 | DOC-002, DOC-003, SEC-001 | Fait | Documentation des connecteurs, fichiers de contribution et de sécurité |
 | COL-001 | Fait en partie | Contrat des collecteurs : téléchargement de chapitres connus d'un lecteur, tâches, annulation, relance. Il manque la recherche et le suivi d'une série |
@@ -262,8 +263,8 @@ connecteurs existants.
 
 | ID | Priorité | Item | Critère d'acceptation |
 | --- | --- | --- | --- |
-| READ-001 | P1 | Connecteur Kavita | Séries, chapitres, images et progression selon API disponible |
-| READ-002 | P1 | Connecteur Folder local | Parcours de dossiers et lecture de formats définis |
+| READ-001 | P2 | Connecteur Kavita | Séries, chapitres, images et progression selon API disponible |
+| READ-002 | P1 | Connecteur Folder (dossiers du NAS) | Service dédié, montage strictement en lecture seule, parcours autorisé et lecture des formats définis ; architecture et sécurité validées avant implémentation |
 | READ-003 | P2 | Connecteur Stump | Fonctions prises en charge documentées et testées |
 | READ-004 | P2 | Connecteur OPDS | Navigation catalogue et récupération des ressources supportées |
 | READ-005 | P1 | Conserver les tests Komga et Suwayomi | Aucun parcours existant régressé |
@@ -282,15 +283,15 @@ téléchargent des chapitres.
 
 | ID | Priorité | Item | Critère d'acceptation |
 | --- | --- | --- | --- |
-| COL-001 | P0 | Définir le contrat des collecteurs | Recherche, suivi, téléchargement et statut documentés |
-| COL-002 | P1 | Connecteur collecte Suwayomi | Recherche et téléchargement testés via API réelle |
+| COL-001 | P0 | Compléter le contrat des collecteurs pour la recherche par titre | Recherche de sources/séries, ajout ou suivi d'une série, téléchargement et statut documentés sans dépendre d'un identifiant de chapitre déjà connu |
+| COL-002 | P1 | Connecteur de collecte Suwayomi complet | Recherche dans les sources, ajout/suivi d'une série et téléchargement via les capacités réellement exposées par l'API ; tests de contrat et tests sur instance réelle |
 | COL-003 | P1 | Étudier et sélectionner Tranga | Projet/API/licence/activité confirmés |
 | COL-004 | P2 | Connecteur Tranga | Tâches et erreurs remontées si API exploitable |
 | COL-005 | P2 | Identifier précisément le projet Mangarr visé | URL officielle et API confirmées |
 | COL-006 | P2 | Connecteur Mangarr | Capacités réelles couvertes si API exploitable par tests |
 | JOB-001 | P0 | Concevoir une file de tâches persistante | Les tâches survivent au redémarrage |
 | JOB-002 | P1 | Ajouter états et historique des tâches | Queues, running, completed, failed, cancelled |
-| JOB-003 | P1 | Ajouter retry avec backoff | Pas de boucle de relance infinie |
+| JOB-003 | P1 | Ajouter une relance automatique avec backoff | Relance bornée, temporisation croissante, respect des états annulés et des capacités du collecteur ; après validation réelle QA-004 |
 | JOB-004 | P1 | Ajouter annulation si supportée | L'UI reflète la capacité réelle |
 | JOB-005 | P1 | Interface de suivi des tâches de collecte accessible depuis les réglages | Résumé dans Réglages (collecteurs, nombre d'actifs) ; écran secondaire avec en cours, file d'attente, erreurs, historique, relance et annulation ; pas d'onglet dans la navigation principale ni de tableau de bord permanent |
 | COL-007 | P1 | Relier collecte et bibliothèque | Après téléchargement, scan/import et vérification |
@@ -388,7 +389,8 @@ suffisamment aboutie.
 | OPS-004 | P1 | Observabilité des tâches | Logs corrélés par tâche et serveur |
 | OPS-005 | P1 | Sauvegarde/restauration documentée | Procédure testée |
 | DEV-001 | P1 | CI pour lint, tests et builds | Pipeline bloquant sur échec |
-| DEV-002 | P1 | Publier images Docker versionnées | Tags et notes de version |
+| DEV-002 | P1 | Publier images Docker versionnées | Pipeline déjà présent ; tags semver et `latest` produits à partir d'un tag Git `v*` |
+| REL-001 | P1 | Publier la première release v0.7.0 | Créer le tag `v0.7.0`, publier les notes de version et vérifier les images GHCR `0.7.0`, `0.7` et `latest` pour Scrollarr et le notifier |
 | DOC-001 | P1 | Guide installation et migration | Installation vierge et upgrade documentés |
 | DOC-002 | P1 | Guide création de connecteur | Exemple minimal fonctionnel |
 | DOC-003 | P1 | Politique de sécurité et signalement | Processus public documenté |
@@ -505,32 +507,30 @@ Commits :
 
 ---
 
-## 7. Ordre d'exécution recommandé — premier backlog
+## 7. Ordre d'exécution recommandé — backlog à partir de v0.7.0
 
-Ne pas ouvrir tous les chantiers simultanément. Commencer par ce lot :
+Ne pas lancer tous les développements en parallèle. L'ordre proposé tient compte de l'état réel du dépôt et des risques encore ouverts.
 
-1. `CORE-001` — cartographier le code et les flux réels.
-2. `QA-001` — mettre en place les tests de non-régression.
-3. `SEC-001` — auditer les secrets et identifiants.
-4. `SYNC-001` — corriger les risques de concurrence de progression.
-5. `CONN-001` — formaliser le contrat connecteur.
-6. `CONN-002` — implémenter les capacités.
-7. `READ-001` — développer Kavita.
-8. `COL-001` — formaliser le contrat collecteur.
-9. `JOB-001` — concevoir la file de tâches persistante.
-10. `MOB-001` — seulement après validation du socle
-    API/authentification, initialiser Capacitor.
+1. `QA-004` — valider sur une vraie instance Suwayomi le cycle de vie complet des tâches (file, progression, échec, annulation, relance, reconnexion et retour en ligne). `QA-003` reste terminé pour la validation fonctionnelle déjà réalisée sur les serveurs réels.
+2. `REL-001` — publier v0.7.0 : le code annonce déjà cette version et le workflow Docker sait publier les tags semver ainsi que `latest` à partir d'un tag `v*` ; il manque le tag/release GitHub et la vérification des images publiées.
+3. `READ-002` — faire d'abord un cadrage technique du connecteur Dossiers : service serveur, montage NAS en lecture seule, périmètre des chemins, formats, stockage des métadonnées/progressions et sécurité. Ne commencer le développement qu'après validation de cette architecture.
+4. `COL-001` puis `COL-002` — compléter le contrat de recherche par titre, puis implémenter la recherche et l'ajout/suivi de séries dans Suwayomi depuis Scrollarr.
+5. `JOB-003` — ajouter la relance automatique avec backoff après validation du comportement réel des états Suwayomi. Cette tâche ne dépend pas fonctionnellement de la recherche par titre, mais elle dépend de la fiabilité de la détection des échecs et des relances.
+6. `COL-003` et `COL-005` — étudier Tranga et le projet Mangarr exact en parallèle ; cette recherche peut avancer pendant les lots précédents. Ne pas lancer les connecteurs avant validation de leurs API, licences et maintenance.
 
-### Critères de sortie de la première itération
+`JOB-001` reste partiellement réalisé : l'historique local survit au rechargement, mais il n'existe pas encore de file Scrollarr centralisée et persistante côté serveur. Ne pas engager ce chantier avant d'avoir défini le besoin réel : persistance après redémarrage, partage entre appareils, ou les deux.
 
-- [ ] Komga fonctionne comme avant.
-- [ ] Suwayomi fonctionne comme avant.
-- [ ] Une panne de serveur n'interrompt pas les autres.
-- [ ] Les connecteurs déclarent leurs capacités.
-- [ ] Les secrets ne sont pas exposés côté client.
-- [ ] La progression n'est pas écrasée silencieusement.
-- [ ] Les tests tournent automatiquement en CI.
-- [ ] Une procédure de restauration a été exécutée.
+`JOB-005` est terminé dans sa forme retenue : résumé dans les réglages et écran secondaire dédié. Aucune entrée de navigation principale ni tableau de bord permanent.
+
+Les développements Dossiers et recherche de collecte peuvent avoir des branches distinctes, mais ils touchent potentiellement aux contrats, capacités et routes communs : paralléliser les études et la conception, puis intégrer les changements de code de façon séquencée.
+
+### Critères de sortie de cette itération
+
+- [ ] Le cycle des tâches Suwayomi est validé sur une instance réelle.
+- [ ] La release v0.7.0 et les deux images GHCR sont publiées et vérifiées.
+- [ ] L'architecture du service Dossiers est validée avant tout montage de NAS.
+- [ ] La recherche par titre respecte les capacités réellement offertes par Suwayomi.
+- [ ] Les relances automatiques sont bornées et ne réactivent pas une tâche annulée.
 
 ---
 
@@ -589,6 +589,7 @@ validations App Store/Play Store peuvent modifier le calendrier.
 - Capacités réelles des API Suwayomi et Kavita utilisées.
 - Formats pris en charge par le connecteur Folder.
 - Besoin réel d'un backend dès la première version.
+- Pour le connecteur Dossiers : valider explicitement le service serveur, les chemins exposés, le montage en lecture seule et l'emplacement des métadonnées/progressions avant développement.
 - Modèle exact de comptes/profils et partage familial.
 - Politique de confidentialité et règles de distribution des applications
   mobiles.
