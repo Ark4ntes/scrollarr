@@ -8,7 +8,7 @@ Two kinds of checks, both run in CI (`.github/workflows/ci.yml`).
 tests/check_syntax.sh
 ```
 
-Runs `node --check` on `app/js/**`, `app/sw.js`, `dev/**` and `notifier/server.js`, then parses every GraphQL query of the Suwayomi connector. The `graphql` package is installed in `tests/graphql/` only (the repo root has no `package.json`). Requires Node 22 and network access for `npm install`.
+Runs `node --check` on `app/js/**`, `app/sw.js`, `dev/**`, `notifier/server.js` and `folders/*.js`, then parses every GraphQL query of the Suwayomi connector. The `graphql` package is installed in `tests/graphql/` only (the repo root has no `package.json`). Requires Node 22 and network access for `npm install`.
 
 ## End-to-end tests (~4 minutes for both scripts)
 
@@ -26,6 +26,13 @@ python tests/e2e_sync.py        # same-revision ties, skewed clocks, change duri
 node tests/unit_sync.mjs        # merge rules alone, no browser (instant)
 node tests/unit_contracts.mjs   # reader and collector contracts (instant)
 node tests/unit_tasks.mjs       # common task model (instant)
+node tests/unit_folders_naming.mjs   # folders service: naming, natural sort, chapter numbers (instant)
+node tests/unit_folders_ids.mjs      # folders service: identifiers, path confinement (instant)
+node tests/unit_folders_config.mjs   # folders service: every invalid configuration refuses to start (~2 s)
+node tests/unit_folders_auth.mjs     # folders service: password/none modes, sessions, attempt limit, cross-origin guards (~3 s)
+node tests/unit_folders_library.mjs  # folders service: index, invalidation, unavailable libraries (~1 s)
+node tests/integration_folders.mjs   # folders service started on a generated library, structure walked over HTTP (~1 s)
+tests/container_folders.sh           # folders image with read-only mounts (needs Docker)
 python tests/e2e_offline.py     # downloaded chapters when the server hangs, is refused by a proxy, or there is no network (~40 s)
 python tests/e2e_tasks.py       # collector tasks: progress, failure, cancellation, history (~40 s)
 ```

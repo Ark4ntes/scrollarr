@@ -75,6 +75,7 @@ L'application est du JavaScript natif en modules ES, sans étape de compilation 
 | `app/js/connectors/` | Connecteurs, rangés par rôle : `readers/` (ce qu'on lit) et `collectors/` (ce qui va chercher les chapitres) |
 | `nginx/` | Configuration du serveur web et des proxys |
 | `notifier/` | Petit service Node qui envoie les notifications push |
+| `folders/` | Petit service Node qui parcourt des dossiers de scans (facultatif, pas encore relié à l'application) |
 | `dev/` | Faux serveurs pour développer, script de vérification |
 
 ## Installation
@@ -145,6 +146,45 @@ Laissez l'option *Analyser les dimensions des pages* activée sur vos bibliothè
 3. Dans Scrollarr : *Réglages > Notifications*, activez l'option, puis *Envoyer un test*.
 
 Le notifier interroge chaque serveur toutes les `POLL_MINUTES` minutes et envoie une notification par série suivie, même si plusieurs chapitres arrivent ensemble. Ses clés et la liste des appareils abonnés sont conservées dans `data/notifier/`.
+
+## Service Dossiers (facultatif, en développement)
+
+`folders/` est un petit service Node qui permettra à Scrollarr de lire des mangas rangés dans de simples dossiers de votre serveur, sans Suwayomi ni Komga. **Il n'est pas encore relié à l'application** : cette première étape fournit seulement le service sécurisé et le parcours des bibliothèques, séries et chapitres en HTTP. Les pages et couvertures, la lecture des archives, la progression et l'intégration à l'application viennent aux étapes suivantes (voir `docs/design/READ-002-connecteur-dossiers.md`).
+
+Il monte vos scans **en lecture seule**, ne reçoit jamais de chemin du client (seulement des identifiants opaques), ne suit aucun lien symbolique et ne publie aucun port : seul le conteneur Scrollarr pourra le joindre, par un réseau Docker interne dédié.
+
+```sh
+mkdir -p data/folders && sudo chown 1000:1000 data/folders    # dossier de données, inscriptible par le service
+echo 'FOLDERS_SCANS_PATH=/chemin/vers/scans' >> .env          # un dossier = une bibliothèque (voir docker-compose.yml)
+docker compose --profile folders up -d --build
+```
+
+**Le service refuse de démarrer sans mode d'authentification explicite.** Renseignez `FOLDERS_AUTH` dans `.env` :
+
+| `FOLDERS_AUTH` | Comportement |
+| --- | --- |
+| `password` | Un identifiant et un mot de passe partagés (`FOLDERS_USER`, `FOLDERS_PASSWORD`, 12 caractères au moins). Tout sauf `/health` exige une session (cookie signé `HttpOnly`, `SameSite=Strict`, `Secure` derrière HTTPS). Les tentatives de connexion sont limitées par adresse. |
+| `none` | Aucun contrôle d'accès, avec un avertissement journalisé à chaque démarrage. `FOLDERS_USER` et `FOLDERS_PASSWORD` doivent alors être vides. |
+
+Toute autre valeur, un mot de passe absent ou de moins de 12 caractères, une variable `FOLDERS_…` inconnue ou une limite non numérique arrête aussi le service au démarrage, avec un message d'une ligne.
+
+**Conséquences pour la sécurité.**
+- Avec `none`, quiconque atteint Scrollarr peut lister tous les noms de séries et de chapitres, lire toutes les pages, et lire ou modifier toute la progression. Il ne peut jamais écrire ni supprimer un fichier, ni atteindre un chemin hors des bibliothèques montées. À réserver à un réseau local de confiance ou à un VPN. Le service ne peut pas vérifier lui-même qu'il n'est pas exposé : derrière un proxy, l'adresse qu'il voit est celle du proxy.
+- Le mot de passe partagé protège l'accès au service. Il ne **sépare pas** les personnes : tous ceux qui le connaissent voient tous les scans et peuvent lire ou modifier la progression de tous les profils (les profils ne sont pas des comptes).
+- **Avant toute exposition de Scrollarr hors d'un réseau local de confiance : mode `password`, en HTTPS.**
+- Les requêtes autres que `GET` doivent porter `X-Requested-With` et `Content-Type: application/json`, et un `Origin` différent de l'hôte est refusé. Cela vaut aussi sur un réseau local.
+
+**Arborescence.** Une bibliothèque est un dossier monté sous `/libraries/<nom>` ; une série est un sous-dossier ; un chapitre est une archive `.cbz`/`.zip` ou un dossier contenant directement des images (les dossiers intermédiaires, comme les tomes, sont tolérés sur 3 niveaux au plus). L'ordre de lecture est le tri naturel des noms (`Chapitre 2` avant `Chapitre 10`). Détails, avertissements et effets d'un renommage : voir l'étude.
+
+**Données.** `data/folders/` contient la clé de signature des sessions et un petit fichier qui retient quelles bibliothèques ont déjà contenu des séries. Sauvegarde : copier ce dossier. Une bibliothèque illisible, ou vide alors qu'elle contenait des séries (partage non monté, dossier chiffré verrouillé), est signalée `unavailable` par `/health` et répond `503`, jamais `404` : avec un `404`, l'application supprimerait vos abonnements.
+
+**Essayer sans NAS.**
+
+```sh
+node dev/make-folders-fixture.mjs /tmp/folders-demo
+FOLDERS_AUTH=none FOLDERS_LIBRARIES_DIR=/tmp/folders-demo/libraries FOLDERS_DATA_DIR=/tmp/folders-demo/data node folders/server.js
+curl localhost:8788/api/v1/libraries
+```
 
 ## Développer
 

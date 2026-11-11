@@ -20,6 +20,7 @@ Scrollarr is a static web app served together with an nginx reverse proxy. Pleas
 - Server addresses come from the installation's environment (`KOMGA_URL`, `SUWAYOMI_URL`), never from user input. The proxy therefore cannot be pointed at arbitrary hosts.
 - In Suwayomi's "basic auth" and "simple login" modes, the credentials are kept in a browser cookie that the proxy converts into an `Authorization` header. This is why HTTPS is required.
 - The optional notifier holds a Komga API key and, if the Suwayomi server is protected, Suwayomi credentials. They live in its environment only.
+- The optional folders service (in development, not yet connected to the app) reads scan folders mounted read-only and never writes to them. It refuses to start without an explicit `FOLDERS_AUTH` mode. In `none` mode anyone who can reach it can list all series and chapter names, read every page and read or change all reading progress, so use it only on a trusted local network or behind a VPN. In `password` mode a single shared password protects access but does not separate people: everyone who knows it sees every scan and every profile's progress. Do not expose it beyond a trusted local network without `password` mode and HTTPS. It publishes no port and is reachable only through a dedicated internal Docker network.
 - Scrollarr has no telemetry of its own.
 
 ## Hardening advice

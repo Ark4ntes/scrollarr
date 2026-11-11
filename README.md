@@ -75,6 +75,7 @@ The app is plain JavaScript in ES modules with no build step: what is in `app/` 
 | `app/js/connectors/` | Connectors, split by role: `readers/` (what you read) and `collectors/` (what fetches chapters) |
 | `nginx/` | Web server and proxy configuration |
 | `notifier/` | Small Node service that sends push notifications |
+| `folders/` | Small Node service that browses scan folders (optional, not yet connected to the app) |
 | `dev/` | Mock servers for development, compatibility checker |
 
 ## Installation
@@ -147,6 +148,45 @@ Keep *Analyze page dimensions* enabled on your libraries (it is by default). Scr
 3. In Scrollarr: *Settings > Notifications*, turn the option on, then *Send a test*.
 
 The notifier polls each server every `POLL_MINUTES` minutes and sends one notification per followed series, even when several chapters arrive together. Its keys and the list of subscribed devices are kept in `data/notifier/`.
+
+## Folders service (optional, in development)
+
+`folders/` is a small Node service that will let Scrollarr read manga stored in plain folders on your server, without Suwayomi or Komga. **It is not connected to the app yet**: this first step only provides the secured service and the browsing of libraries, series and chapters over HTTP. Pages and covers, archive reading, reading progress and the integration into the app come in later steps (see `docs/design/READ-002-connecteur-dossiers.md`).
+
+It mounts your scans **read-only**, never receives a path from the client (only opaque identifiers), never follows symbolic links, and publishes no port: only the Scrollarr container will reach it, through a dedicated internal Docker network.
+
+```sh
+mkdir -p data/folders && sudo chown 1000:1000 data/folders    # data folder, writable by the service
+echo 'FOLDERS_SCANS_PATH=/path/to/scans' >> .env              # one folder = one library (see docker-compose.yml)
+docker compose --profile folders up -d --build
+```
+
+**The service refuses to start without an explicit authentication mode.** Set `FOLDERS_AUTH` in `.env`:
+
+| `FOLDERS_AUTH` | Behaviour |
+| --- | --- |
+| `password` | One shared user and password (`FOLDERS_USER`, `FOLDERS_PASSWORD`, at least 12 characters). Everything except `/health` needs a session (signed `HttpOnly`, `SameSite=Strict` cookie, `Secure` behind HTTPS). Login attempts are limited per address. |
+| `none` | No access control at all, a warning is logged at every start. `FOLDERS_USER` and `FOLDERS_PASSWORD` must then be empty. |
+
+Any other value, a missing password, a password shorter than 12 characters, an unknown `FOLDERS_…` variable or a non-numeric limit also stops the service at startup, with a one-line message.
+
+**Security consequences.**
+- With `none`, anyone who can reach Scrollarr can list every series and chapter name, read every page and read or change all reading progress. It can never write or delete a file, nor reach a path outside the mounted libraries. Use it only on a trusted local network or behind a VPN. The service cannot check by itself that it is not exposed: behind a proxy, the address it sees is the proxy's.
+- The shared password protects access to the service. It does **not** separate people: everyone who knows it sees all scans and can read or change the progress of every profile (profiles are not accounts).
+- **Before exposing Scrollarr beyond a trusted local network, use `password` mode, over HTTPS.**
+- Requests other than `GET` must carry `X-Requested-With` and `Content-Type: application/json`, and a mismatching `Origin` is refused. This also applies on a local network.
+
+**Layout.** A library is a folder mounted under `/libraries/<name>`; a series is a sub-folder; a chapter is a `.cbz`/`.zip` archive or a folder directly containing images (intermediate folders such as volumes are tolerated, 3 levels at most). Reading order is the natural sort of names (`Chapter 2` before `Chapter 10`). Details, warnings and renaming effects: see the study.
+
+**Data.** `data/folders/` holds a session signing key and a small file remembering which libraries have held series. Back it up by copying it. A library that cannot be read, or that is empty although it used to hold series (share not mounted, encrypted folder locked), is reported `unavailable` in `/health` and answers `503`, never `404`: with a `404` the app would delete your subscriptions.
+
+**Try it without a NAS.**
+
+```sh
+node dev/make-folders-fixture.mjs /tmp/folders-demo
+FOLDERS_AUTH=none FOLDERS_LIBRARIES_DIR=/tmp/folders-demo/libraries FOLDERS_DATA_DIR=/tmp/folders-demo/data node folders/server.js
+curl localhost:8788/api/v1/libraries
+```
 
 ## Development
 
