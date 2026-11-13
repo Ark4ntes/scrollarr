@@ -323,6 +323,17 @@ A collector can also start from a title instead of a chapter a reader already sh
 
 Register it under `COLLECTORS` in `app/js/connectors/index.js`.
 
+## Supported server versions
+
+Last reviewed: 2026-11-13. A weekly review compares every new release of the servers with the API calls Scrollarr makes (see `docs/COMPAT-WATCH.md`). "Reviewed" means the release notes and the server sources were checked against Scrollarr's calls; "used" means the author runs it.
+
+| Server | Reviewed, no regression found | Used by the author | Calls checked |
+| --- | --- | --- | --- |
+| Suwayomi-Server | v2.0.1727 to v2.4.2366 | 2.3 | GraphQL operations in `app/js/connectors/suwayomi-queries.js` |
+| Komga | up to 1.29.2 | yes | REST `/api/v1` and `/api/v2/users/me` endpoints in `app/js/connectors/readers/komga.js` |
+
+Not covered by this table: versions released after the date above, and pre-release builds.
+
 ## Project status and known limits
 
 - **Automated checks**: full journeys (Suwayomi only, Komga only, both together, Suwayomi's four authentication modes, offline, profiles) pass in Chrome against the mock servers in `dev/`. The nginx configuration was run in front of those mocks for a basic journey (sign-in to both servers, library, reading).

@@ -318,6 +318,17 @@ Un collecteur peut aussi partir d'un titre plutôt que d'un chapitre qu'un lecte
 
 Il s'inscrit sous `COLLECTORS` dans `app/js/connectors/index.js`.
 
+## Versions de serveurs prises en charge
+
+Dernière revue : 13/11/2026. Une revue hebdomadaire compare chaque nouvelle version des serveurs aux appels que fait Scrollarr (voir `docs/COMPAT-WATCH.md`). « Revue » signifie que les notes de version et les sources du serveur ont été confrontées aux appels de Scrollarr ; « utilisée » signifie que l'auteur la fait tourner.
+
+| Serveur | Revue, aucune régression trouvée | Utilisée par l'auteur | Appels vérifiés |
+| --- | --- | --- | --- |
+| Suwayomi-Server | de la v2.0.1727 à la v2.4.2366 | 2.3 | opérations GraphQL de `app/js/connectors/suwayomi-queries.js` |
+| Komga | jusqu'à la 1.29.2 | oui | points d'accès REST `/api/v1` et `/api/v2/users/me` de `app/js/connectors/readers/komga.js` |
+
+Hors de ce tableau : les versions publiées après la date ci-dessus et les préversions.
+
 ## État du projet et limites connues
 
 - **Vérifié** : les parcours complets (Suwayomi seul, Komga seul, les deux ensemble, les quatre modes d'authentification de Suwayomi, hors ligne, profils) passent dans Chrome contre les faux serveurs de `dev/`. La configuration nginx a été exécutée devant ces faux serveurs pour un parcours de base (connexion aux deux serveurs, bibliothèque, lecture).
