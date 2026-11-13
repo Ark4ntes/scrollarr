@@ -42,7 +42,7 @@ services:
   # Service Dossiers : lit des dossiers de scans montés en lecture seule.
   # L'application l'atteint par FOLDERS_URL=http://folders:8788 (réseau folders_net). Aucun port publié.
   # Le service refuse de démarrer sans FOLDERS_AUTH (« password » ou « none »),
-  # voir README.md. Dossier de données : « mkdir -p data/folders » puis donnez-le
+  # voir docs/fr/installation.md. Dossier de données : « mkdir -p data/folders » puis donnez-le
   # à l'utilisateur FOLDERS_UID:FOLDERS_GID (1000:1000 par défaut).
   folders:
     profiles: ["folders"]
@@ -66,6 +66,8 @@ services:
     volumes:
       # Une bibliothèque = un montage sous /libraries, toujours en lecture seule (:ro).
       # Ajoutez une ligne par bibliothèque, sans sous-montage dans le dossier monté.
+      # Le dossier monté doit contenir directement les séries (un sous-dossier = une série,
+      # dedans un dossier d'images ou un CBZ/ZIP par chapitre). Schéma dans .env.example.
       - ${FOLDERS_SCANS_PATH:-./scans}:/libraries/Scans:ro
       - ./data/folders:/data
 

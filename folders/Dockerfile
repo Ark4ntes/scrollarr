@@ -1,6 +1,6 @@
 FROM node:22-alpine
 LABEL org.opencontainers.image.title="Scrollarr folders" \
-      org.opencontainers.image.description="Optional service that lets Scrollarr browse and read manga folders and CBZ/ZIP archives mounted read-only (not yet connected to the app)" \
+      org.opencontainers.image.description="Optional service that lets Scrollarr browse and read manga folders and CBZ/ZIP archives mounted read-only" \
       org.opencontainers.image.source="https://github.com/Ark4ntes/scrollarr" \
       org.opencontainers.image.licenses="MIT"
 WORKDIR /app

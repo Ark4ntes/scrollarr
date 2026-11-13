@@ -1,6 +1,6 @@
 # scrollarr-folders
 
-Petit service Node qui lit des dossiers de scans montés **en lecture seule** : dossiers d'images et archives CBZ/ZIP. Il n'écrit jamais dans les scans, ne reçoit jamais de chemin de la part du client (seulement des identifiants opaques) et n'extrait rien sur disque. Étude d'architecture : `docs/design/READ-002-connecteur-dossiers.md` (les renvois `§` ci-dessous y pointent). Installation, variables d'environnement et sécurité : `README.md` à la racine du dépôt.
+Petit service Node qui lit des dossiers de scans montés **en lecture seule** : dossiers d'images et archives CBZ/ZIP. Il n'écrit jamais dans les scans, ne reçoit jamais de chemin de la part du client (seulement des identifiants opaques) et n'extrait rien sur disque. Étude d'architecture : `docs/design/READ-002-connecteur-dossiers.md` (les renvois `§` ci-dessous y pointent). Installation, variables d'environnement et sécurité : `docs/fr/installation.md`, `docs/fr/configuration.md` et `docs/fr/security.md` (en anglais : `docs/en/`).
 
 Ce document décrit ce que fait le service quand il **lit les contenus**, comment il **détecte les changements** dans les dossiers et comment il **enregistre la progression**.
 
