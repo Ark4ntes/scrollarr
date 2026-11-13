@@ -16,7 +16,16 @@ tag="$$"
 net="scrollarr-hardening-$tag"
 cleanup() { docker rm -f "sh-main-$tag" "sh-proxy-$tag" "sh-notifier-$tag" "sh-up-$tag" >/dev/null 2>&1 || true; docker network rm "$net" >/dev/null 2>&1 || true; docker rmi "scrollarr:hardening-$tag" "scrollarr-notifier:hardening-$tag" >/dev/null 2>&1 || true; rm -rf "$work"; }
 trap cleanup EXIT
-check() { if "${@:2}"; then echo "PASS $1"; else echo "FAIL $1"; exit 1; fi; }
+# En cas d'échec, l'état et la fin des journaux des conteneurs partent dans une annotation GitHub
+# (« ::error:: ») : c'est la seule trace lisible sans accès aux journaux de la CI.
+diag() {
+  for c in "sh-main-$tag" "sh-proxy-$tag" "sh-notifier-$tag"; do
+    docker inspect "$c" >/dev/null 2>&1 || continue
+    printf '%s [%s] ' "$c" "$(docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}}' "$c" 2>&1)"
+    docker logs --tail 6 "$c" 2>&1 | tr '\n' '|' | cut -c1-900
+  done
+}
+check() { if "${@:2}"; then echo "PASS $1"; else echo "FAIL $1"; echo "::error title=container_hardening::FAIL $1 -- $(diag | tr -d '\r' | tr '\n' ' ')"; exit 1; fi; }
 
 # Options Compose d'un service, converties en arguments « docker run » (un par ligne, protégés par shlex).
 # Refuse un fichier Compose qui n'a plus les options attendues : le test ne doit pas passer à vide.
