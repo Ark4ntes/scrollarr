@@ -83,11 +83,11 @@ The app is plain JavaScript in ES modules with no build step: what is in `app/` 
 
 Requirements: Docker, at least one running server (Suwayomi or Komga), and an **HTTPS** address for Scrollarr. Over plain HTTP the app still reads, but browsers disable installation to the home screen, offline downloads and notifications.
 
-Scrollarr is published as a ready-to-run image, so you do not need to clone the repository. Images (`ghcr.io/ark4ntes/scrollarr` and `ghcr.io/ark4ntes/scrollarr-notifier`, for `amd64` and `arm64`) are published when a version tag is pushed. Until the first release, build from a clone instead (see the alternative below).
+Scrollarr is published as ready-to-run images, so you do not need to clone the repository. The three images (`ghcr.io/ark4ntes/scrollarr`, `scrollarr-notifier` and `scrollarr-folders`, for `amd64` and `arm64`) share one version number and are published with every release. If the repository lists no release yet, build the images from a clone instead (see the alternative below).
 
 1. Create a folder on your machine, for example `/volume1/docker/scrollarr`, and download the two files you need into it:
    ```sh
-   curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/docker-compose.yml
+   curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/deploy/docker-compose.yml
    curl -o .env https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/.env.example
    ```
    Edit `.env`: set `SUWAYOMI_URL` and/or `KOMGA_URL` to the address of each server as seen from the container (for example `http://192.168.1.10:4567`). Leave empty the one you do not use. To read plain folders instead, see *Folders service* below (`FOLDERS_URL`).
@@ -98,6 +98,16 @@ Scrollarr is published as a ready-to-run image, so you do not need to clone the 
    The app answers on port `8380` (change it with `SCROLLARR_PORT`). After editing `.env`, recreate the container with `docker compose up -d --force-recreate`.
 3. Publish it over HTTPS with your reverse proxy. On a Synology NAS: *Control Panel > Login Portal > Advanced > Reverse Proxy*, source `https://scrollarr.example.com:443`, destination `http://localhost:8380`, then assign the certificate under *Security > Certificate*.
 4. Open the address. If a server requires authentication, Scrollarr shows its sign-in form; otherwise you land directly on the home screen.
+
+### Updating
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+then reload the app twice in the browser (or accept the update prompt): each device keeps the previous version cached until then. Add `--profile push` or `--profile folders` to both commands if you use those services. The installed version is shown under *Settings > About*.
+
+To pin a version or go back to the previous one, put its number in `.env` (`SCROLLARR_VERSION=0.9.0`, or `0.9` to receive only that series' fixes) and run `docker compose up -d` again. Your settings live in `.env` and the optional services' data in `./data`: an update does not touch them.
 
 **Alternative: from a clone.** Copy the repository, then `cp .env.example .env`, fill it in as above and run `docker compose up -d --build`: the images are built locally instead of being pulled.
 
