@@ -267,17 +267,28 @@ Un collecteur va chercher des chapitres ; il n'a pas à lister une bibliothèque
 | Membre | Rôle |
 | --- | --- |
 | `id`, `label` | Identifiant et nom affiché |
-| `capabilities` | Parmi les capacités « collecteurs » de `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`) |
+| `capabilities` | Parmi les capacités « collecteurs » de `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`, `collect.sources`, `collect.search`, `collect.add`) |
 | `serves` | Lecteurs dont il comprend les identifiants de chapitre (`['suwayomi']`) ; vide s'il n'en partage avec aucun |
 | `session` | Nom du lecteur dont il réutilise la session. Sans cela, le collecteur a son propre serveur et fournit `session()`, `login()`, `logout()` |
 | `collectChapters(readerId, chapterIds)` | Avec `collect.chapters` : récupérer des chapitres désignés par les identifiants de ce lecteur |
 | `tasks()`, `resolveTasks(nativeIds)` | Avec `collect.tasks` : ce que le collecteur fait en ce moment, et ce que sont devenues les tâches qu'il ne liste plus |
 | `cancelTask(nativeId)` | Avec `collect.cancel` |
 | `retryTask(nativeId)` | Avec `collect.retry` : relancer une tâche en échec ou annulée |
+| `sources()` | Avec `collect.sources` : où il sait chercher, sous la forme `[{ id, label, language, nsfw, icon }]` |
+| `search(sourceId, query)` | Avec `collect.search` (exige `collect.sources`) : chercher un titre dans une source, renvoie `{ results, more }` |
+| `add(resultId)` | Avec `collect.add` (exige `collect.search`) : ajouter ou suivre un résultat, renvoie `{ reader, seriesId, complete }` |
 
 Les tâches de tous les collecteurs sont ramenées à une seule forme par `app/js/tasks.js` : identifiant, collecteur, série et chapitre, état (`queued`, `running`, `done`, `failed`, `cancelled`), progression, dates de création, de début et de fin, erreur, nombre de tentatives, et possibilité d'annuler. L'application garde ce qu'un collecteur oublie (dates, tâches terminées). Les réglages n'en montrent qu'un résumé (collecteurs, nombre de téléchargements actifs) ; le détail est sur un écran secondaire ouvert depuis là, avec les téléchargements en cours, la file d'attente, les erreurs et l'historique, et les actions d'annulation et de relance que chaque collecteur permet. La collecte n'a jamais d'onglet à elle : elle reste en arrière-plan tant qu'on ne vient pas la regarder. Cet historique est propre à chaque appareil, et les dates que le collecteur ne fournit pas sont celles où l'application a constaté le changement.
 
-Il s'inscrit sous `COLLECTORS` dans `app/js/connectors/index.js`. Il n'existe pas encore de moyen de lancer une collecte à partir d'un titre : un collecteur qui part d'une recherche par titre plutôt que des identifiants d'un lecteur (Tranga, par exemple) demandera une nouvelle capacité, et les écrans qui vont avec.
+Un collecteur peut aussi partir d'un titre plutôt que d'un chapitre qu'un lecteur affiche déjà, avec les trois capacités de recherche, chacune exigeant la précédente. Les formes sont décrites en tête de `collector-contract.js`, où `normalizeSource`, `normalizeResult`, `normalizeSearch` et `normalizeAdded` les vérifient :
+
+- Une **source** est `{ id, label, language, nsfw, icon }`. `nsfw` est l'indication du serveur lui-même ; l'application ne cherche pas dans ces sources tant qu'on ne les a pas choisies.
+- Un **résultat** est `{ id, title, cover, sourceId, sourceLabel, language, inLibrary, reader, seriesId }`. `id` est propre au collecteur et opaque pour l'application, qui le rend tel quel à `add()`. `cover` et l'`icon` d'une source sont des chemins de même origine (par le proxy), jamais des adresses externes : la politique de sécurité n'autorise aucune image externe. `inLibrary` dit que le collecteur le tient déjà. `reader` et `seriesId` désignent la série correspondante d'un lecteur que le collecteur sert, tous deux ou aucun, et seulement si `inLibrary`.
+- `add()` renvoie `{ reader, seriesId, complete }` : la série qui existe désormais chez le lecteur, et `complete: false` si elle est ajoutée mais que sa liste de chapitres n'a pas encore pu être récupérée.
+- Un collecteur qui ne partage aucun identifiant avec un lecteur (Tranga, Mangarr) déclare un `serves` vide et renvoie `reader: null, seriesId: null` partout où Suwayomi renvoie une série du lecteur. Il peut quand même dire `inLibrary: true` (« déjà suivi »), mais la série n'existe chez un lecteur qu'une fois ses fichiers récupérés et scannés, et on ne sait pas laquelle avant. L'application ne propose alors aucun lien.
+- Une recherche interroge des sites tiers : l'application n'en lance une que sur une action explicite de l'utilisateur, une source à la fois avec un parallélisme borné, et une source en échec ne fait jamais échouer les autres. `search()` lève une erreur pour cette seule source.
+
+Il s'inscrit sous `COLLECTORS` dans `app/js/connectors/index.js`.
 
 ## État du projet et limites connues
 

@@ -272,17 +272,28 @@ A collector fetches chapters; it does not have to list a library or serve pages.
 | Member | Role |
 | --- | --- |
 | `id`, `label` | Identifier and displayed name |
-| `capabilities` | From the collector list in `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`) |
+| `capabilities` | From the collector list in `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`, `collect.sources`, `collect.search`, `collect.add`) |
 | `serves` | Readers whose chapter identifiers it understands (`['suwayomi']`); empty if it shares identifiers with none |
 | `session` | Name of the reader whose session it reuses. Without it, the collector has its own server and provides `session()`, `login()`, `logout()` |
 | `collectChapters(readerId, chapterIds)` | With `collect.chapters`: fetch chapters designated by that reader's identifiers |
 | `tasks()`, `resolveTasks(nativeIds)` | With `collect.tasks`: what the collector is doing now, and what became of tasks it no longer lists |
 | `cancelTask(nativeId)` | With `collect.cancel` |
 | `retryTask(nativeId)` | With `collect.retry`: restart a failed or cancelled task |
+| `sources()` | With `collect.sources`: where it can search, as `[{ id, label, language, nsfw, icon }]` |
+| `search(sourceId, query)` | With `collect.search` (needs `collect.sources`): search one source by title, returns `{ results, more }` |
+| `add(resultId)` | With `collect.add` (needs `collect.search`): add or follow a result, returns `{ reader, seriesId, complete }` |
 
 Tasks from every collector are brought to one shape by `app/js/tasks.js`: identifier, collector, series and chapter, state (`queued`, `running`, `done`, `failed`, `cancelled`), progress, creation, start and end dates, error, attempts, and whether it can be cancelled. The app keeps what a collector forgets (dates, finished tasks). Settings only show a summary (collectors, number of active downloads); the detail is on a secondary screen opened from there, with running downloads, the queue, errors and history, and the cancel and retry actions each collector supports. Collection never gets a tab of its own: it stays in the background until you go and look at it. This history is kept per device, and dates the collector does not provide are the moment the app noticed the change.
 
-Register it under `COLLECTORS` in `app/js/connectors/index.js`. There is no way yet to start a collection from a title: a collector that works from a title search rather than a reader's identifiers (Tranga, for instance) will need a new capability, and screens to go with it.
+A collector can also start from a title instead of a chapter a reader already shows, with the three search capabilities, each needing the one before. The shapes are documented at the top of `collector-contract.js`, and `normalizeSource`, `normalizeResult`, `normalizeSearch` and `normalizeAdded` there check them:
+
+- A **source** is `{ id, label, language, nsfw, icon }`. `nsfw` is the server's own flag; the app does not search such sources unless the user picks them.
+- A **result** is `{ id, title, cover, sourceId, sourceLabel, language, inLibrary, reader, seriesId }`. `id` is native to the collector and opaque to the app, which hands it back to `add()`. `cover` and a source `icon` are same-origin paths (through the proxy), never external URLs: the content security policy allows no external image. `inLibrary` says the collector already holds it. `reader` and `seriesId` name the matching series of a reader the collector serves, both or neither, and only when `inLibrary`.
+- `add()` returns `{ reader, seriesId, complete }`: the series that now exists in the reader, and `complete: false` if it was added but its chapter list could not be fetched yet.
+- A collector that shares no identifiers with any reader (Tranga, Mangarr) declares an empty `serves` and returns `reader: null, seriesId: null` everywhere Suwayomi returns a reader series. It may still say `inLibrary: true` ("already followed"), but the series only exists in a reader once its files are collected and scanned, and nobody knows which one it will be before. The app then offers no link.
+- A search hits third-party sites: the app only runs one on an explicit user action, one source at a time with bounded parallelism, and a failing source never fails the others. `search()` throws for that source alone.
+
+Register it under `COLLECTORS` in `app/js/connectors/index.js`.
 
 ## Project status and known limits
 
