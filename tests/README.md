@@ -28,6 +28,7 @@ python tests/e2e_sync.py        # same-revision ties, skewed clocks, change duri
 node tests/unit_sync.mjs        # merge rules alone, no browser (instant)
 node tests/unit_contracts.mjs   # reader and collector contracts (instant)
 node tests/unit_tasks.mjs       # common task model (instant)
+node tests/unit_tasks_shared.mjs  # task history merged between devices: finished beats active, cleared stays cleared, bounds (instant)
 node tests/unit_folders_naming.mjs   # folders service: naming, natural sort, chapter numbers (instant)
 node tests/unit_folders_ids.mjs      # folders service: identifiers, path confinement (instant)
 node tests/unit_folders_config.mjs   # folders service: every invalid configuration refuses to start (~2 s)
@@ -52,6 +53,7 @@ python tests/e2e_folders.py     # folders reader on the REAL folders service: no
 python tests/e2e_folders_progress.py  # folders reader on the REAL service: resume after reload, service restart (SIGTERM, SIGKILL) and network cut, mark read/unread, home lists; folders-only UI without failed requests (~2 min)
 python tests/e2e_folders_profiles.py  # folders service next to the mock Suwayomi: a secondary profile on two devices, other profiles do not see it, deletion forgets it (~2 min)
 python tests/e2e_tasks.py       # collector tasks: progress, failure, cancellation, history (~40 s)
+python tests/e2e_tasks_shared.py  # task history shared by two devices through the servers' store: sync, retry, clearing (~1 min)
 ```
 
 Each script prints `PASS`/`FAIL` lines, then `ALL PASS` or `SOME FAILED`. The exit status is 0 only if every check passed and no exception occurred; demo servers are always stopped.

@@ -461,11 +461,53 @@ export async function serverDownload(bookIds) {
 const TASKS_KEY = 'scrollarr.tasks';
 let taskList = readJson(TASKS_KEY, []);
 export const taskEvents = new EventTarget();
-function setTasks(list) {
+// Pierres tombales de « Effacer l'historique » (voir tasks.js), conservées avec la liste.
+const CLEARED_KEY = 'scrollarr.tasks.cleared';
+let taskCleared = readJson(CLEARED_KEY, {});
+/** Remplace la liste locale. Si ce qui est partagé change (tâches terminées, effacements), prépare l'envoi aux serveurs. */
+function setTasks(list, { cleared = taskCleared, share = true } = {}) {
+  const before = share ? JSON.stringify(tasksModel.sharedView({ tasks: taskList, cleared: taskCleared })) : null;
   taskList = list;
-  try { localStorage.setItem(TASKS_KEY, JSON.stringify(list)); } catch { /* stockage plein : le suivi reste en mémoire */ }
+  taskCleared = cleared;
+  try {
+    localStorage.setItem(TASKS_KEY, JSON.stringify(list));
+    localStorage.setItem(CLEARED_KEY, JSON.stringify(cleared));
+  } catch { /* stockage plein : le suivi reste en mémoire */ }
   taskEvents.dispatchEvent(new Event('change'));
+  if (share && JSON.stringify(tasksModel.sharedView({ tasks: taskList, cleared: taskCleared })) !== before) { taskGen++; pushTasks(); }
 }
+
+// Historique partagé : un seul document pour toute l'installation (les tâches
+// sont celles du collecteur, pas d'un profil), rangé dans le stockage
+// clé-valeur des serveurs comme les abonnements. Lecture, fusion, écriture ;
+// un changement local pendant l'échange repart ensuite. Les échecs sont
+// silencieux et réessayés plus tard. Sans stockage, l'historique reste par appareil.
+const TASKS_DOC = 'scrollarr.tasks';
+let taskGen = 0;          // augmente à chaque changement local de ce qui est partagé
+let taskSyncing = false;
+let taskPulledAt = 0;
+let taskPushTimer;
+const pushTasks = () => { clearTimeout(taskPushTimer); taskPushTimer = setTimeout(() => syncTasks(true), 800); };
+async function syncTasks(write) {
+  if (taskSyncing || !hasStore() || !canTrackTasks()) return;
+  taskSyncing = true;
+  try {
+    let text;
+    try { text = await getClientSetting(TASKS_DOC); } catch { return; } // serveur injoignable : on réessaiera, sans rien écraser
+    let remote = null;
+    try { remote = JSON.parse(text); } catch { /* rien d'enregistré */ }
+    taskPulledAt = Date.now();
+    const gen = taskGen;
+    const union = tasksModel.mergeTasks({ tasks: taskList, cleared: taskCleared }, remote);
+    if (JSON.stringify(union) !== JSON.stringify({ tasks: taskList, cleared: taskCleared })) { setTasks(union.tasks, { cleared: union.cleared, share: false }); merged.clear(); }
+    const doc = JSON.stringify(tasksModel.sharedView(union));
+    if (write || doc !== JSON.stringify(tasksModel.sharedView(remote))) {
+      try { await setClientSetting(TASKS_DOC, doc); } catch { taskPulledAt = 0; return; }
+    }
+    if (taskGen !== gen) pushTasks();
+  } finally { taskSyncing = false; }
+}
+
 const trackers = () => collectors.filter((k) => k.capabilities.includes(CAP.COLLECT_TASKS) && collectorUsable(k));
 const collectorLabel = (id) => collectors.find((k) => k.id === id)?.label || id;
 
@@ -512,6 +554,7 @@ export async function refreshTasks() {
     }
   }
   if (JSON.stringify(list) !== JSON.stringify(taskList)) { setTasks(list); merged.clear(); }
+  if (Date.now() - taskPulledAt > 15000) syncTasks(false).catch(() => {}); // sans attendre : l'écran ne dépend pas des serveurs
   return tasks();
 }
 
@@ -538,7 +581,10 @@ export async function clearTaskHistory() {
   for (const task of taskList.filter((x) => x.state === 'failed')) {
     if (collectorCan(task.collector, CAP.COLLECT_CANCEL)) await collectors.find((k) => k.id === task.collector).cancelTask(task.nativeId).catch(() => {});
   }
-  setTasks(taskList.filter(tasksModel.isActive));
+  // Les tâches effacées laissent une pierre tombale, pour que les autres appareils ne les ramènent pas.
+  const cleared = { ...taskCleared };
+  for (const task of taskList.filter(tasksModel.isFinished)) cleared[task.id] = Math.max(cleared[task.id] ?? 0, task.finishedAt || 0);
+  setTasks(taskList.filter(tasksModel.isActive), { cleared });
 }
 
 // ───────────── Réglages conservés sur les serveurs ─────────────

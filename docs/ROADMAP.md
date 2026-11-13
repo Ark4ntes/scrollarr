@@ -21,7 +21,7 @@ Ce document décrit une cible. Voici où en est réellement le dépôt.
 | DOC-002, DOC-003, SEC-001 | Fait | Documentation des connecteurs, fichiers de contribution et de sécurité |
 | COL-001 | Fait en partie | Contrat des collecteurs : téléchargement de chapitres connus d'un lecteur, tâches, annulation, relance. Il manque la recherche et le suivi d'une série |
 | COL-002 | Fait en partie | Collecteur Suwayomi : téléchargement et file d'attente. Pas de recherche chez les sources |
-| JOB-001 | Fait en partie | Les tâches suivies survivent au rechargement, par appareil. La file elle-même reste celle du collecteur |
+| JOB-001 | Fait dans sa forme retenue | Les tâches suivies survivent au rechargement, et l'historique des tâches terminées est partagé entre appareils par le stockage clé-valeur des serveurs (comme les abonnements). La file reste celle du collecteur ; pas de file propre à Scrollarr |
 | JOB-002, JOB-004, JOB-005 | Fait | Modèle commun des tâches, états et historique, annulation, écran de suivi ouvert depuis les réglages |
 | JOB-003 | Fait en partie | Relance manuelle ; pas de relance automatique avec délai croissant |
 | LIB-001 | Fait en partie | Limite documentée : les doublons sont reconnus par leur titre uniquement |
@@ -519,7 +519,7 @@ Ne pas lancer tous les développements en parallèle. L'ordre proposé tient com
 5. `JOB-003` — ajouter la relance automatique avec backoff après validation du comportement réel des états Suwayomi. Cette tâche ne dépend pas fonctionnellement de la recherche par titre, mais elle dépend de la fiabilité de la détection des échecs et des relances.
 6. `COL-003` et `COL-005` — étudier Tranga et le projet Mangarr exact en parallèle ; cette recherche peut avancer pendant les lots précédents. Ne pas lancer les connecteurs avant validation de leurs API, licences et maintenance.
 
-`JOB-001` reste partiellement réalisé : l'historique local survit au rechargement, mais il n'existe pas encore de file Scrollarr centralisée et persistante côté serveur. Ne pas engager ce chantier avant d'avoir défini le besoin réel : persistance après redémarrage, partage entre appareils, ou les deux.
+`JOB-001` est terminé dans sa forme retenue : la file survit chez le collecteur, et l'historique des tâches terminées est partagé entre appareils par le stockage clé-valeur des serveurs (un document pour l'installation, sans nouveau service). Une file Scrollarr centralisée n'est pas voulue pour l'instant. Limites : seules les tâches terminées sont partagées, le partage demande un serveur avec stockage clé-valeur (sinon l'historique reste par appareil), et « Effacer l'historique » repose sur des pierres tombales bornées.
 
 `JOB-005` est terminé dans sa forme retenue : résumé dans les réglages et écran secondaire dédié. Aucune entrée de navigation principale ni tableau de bord permanent.
 
