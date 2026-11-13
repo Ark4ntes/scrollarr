@@ -29,7 +29,7 @@ Ce document décrit une cible. Voici où en est réellement le dépôt.
 
 Tous les autres items sont à faire. Les phases 4 à 6 (bibliothèque universelle, comptes, applications mobiles) dépendent de la décision « backend léger » de la section 10 : l'application actuelle fonctionne sans backend, avec un simple nginx.
 
-Les numéros de version des jalons (v1.1, v1.2…) sont ceux de la cible ; le dépôt en est à la version 0.7.0.
+Les numéros de version des jalons (v1.1, v1.2…) sont ceux de la cible ; le dépôt en est à la version 0.9.0.
 
 ---
 
@@ -391,7 +391,7 @@ suffisamment aboutie.
 | OPS-005 | P1 | Sauvegarde/restauration documentée | Procédure testée |
 | DEV-001 | P1 | CI pour lint, tests et builds | Pipeline bloquant sur échec |
 | DEV-002 | P1 | Publier images Docker versionnées | Pipeline déjà présent ; tags semver et `latest` produits à partir d'un tag Git `v*` |
-| REL-001 | P1 | Publier la première release v0.7.0 | Créer le tag `v0.7.0`, publier les notes de version et vérifier les images GHCR `0.7.0`, `0.7` et `latest` pour Scrollarr et le notifier |
+| REL-001 | P1 | Publier la première release v0.9.0 | Créer le tag `v0.9.0`, publier les notes de version et vérifier les images GHCR `0.9.0`, `0.9` et `latest` pour Scrollarr, le notifier et le service Dossiers |
 | DOC-001 | P1 | Guide installation et migration | Installation vierge et upgrade documentés |
 | DOC-002 | P1 | Guide création de connecteur | Exemple minimal fonctionnel |
 | DOC-003 | P1 | Politique de sécurité et signalement | Processus public documenté |
@@ -508,12 +508,12 @@ Commits :
 
 ---
 
-## 7. Ordre d'exécution recommandé — backlog à partir de v0.7.0
+## 7. Ordre d'exécution recommandé — backlog à partir de v0.9.0
 
 Ne pas lancer tous les développements en parallèle. L'ordre proposé tient compte de l'état réel du dépôt et des risques encore ouverts.
 
 1. `QA-004` — valider sur une vraie instance Suwayomi le cycle de vie complet des tâches (file, progression, échec, annulation, relance, reconnexion et retour en ligne). `QA-003` reste terminé pour la validation fonctionnelle déjà réalisée sur les serveurs réels.
-2. `REL-001` — publier v0.7.0 : le code annonce déjà cette version et le workflow Docker sait publier les tags semver ainsi que `latest` à partir d'un tag `v*` ; il manque le tag/release GitHub et la vérification des images publiées.
+2. `REL-001` — publier v0.9.0 : le code annonce déjà cette version et le workflow Docker sait publier les tags semver ainsi que `latest` à partir d'un tag `v*` ; il manque le tag/release GitHub et la vérification des images publiées.
 3. `READ-002` — faire d'abord un cadrage technique du connecteur Dossiers : service serveur, montage NAS en lecture seule, périmètre des chemins, formats, stockage des métadonnées/progressions et sécurité. Ne commencer le développement qu'après validation de cette architecture.
 4. `COL-001` puis `COL-002` — compléter le contrat de recherche par titre, puis implémenter la recherche et l'ajout/suivi de séries dans Suwayomi depuis Scrollarr.
 5. `JOB-003` — ajouter la relance automatique avec backoff après validation du comportement réel des états Suwayomi. Cette tâche ne dépend pas fonctionnellement de la recherche par titre, mais elle dépend de la fiabilité de la détection des échecs et des relances.
@@ -528,7 +528,7 @@ Les développements Dossiers et recherche de collecte peuvent avoir des branches
 ### Critères de sortie de cette itération
 
 - [ ] Le cycle des tâches Suwayomi est validé sur une instance réelle.
-- [ ] La release v0.7.0 et les deux images GHCR sont publiées et vérifiées.
+- [ ] La release v0.9.0 et les trois images GHCR sont publiées et vérifiées.
 - [ ] L'architecture du service Dossiers est validée avant tout montage de NAS.
 - [ ] La recherche par titre respecte les capacités réellement offertes par Suwayomi.
 - [ ] Les relances automatiques sont bornées et ne réactivent pas une tâche annulée.
