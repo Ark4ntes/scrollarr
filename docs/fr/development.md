@@ -32,9 +32,12 @@ Options, en variables d'environnement :
 | `FOLDERS` | non défini | Adresse d'un vrai service Dossiers vers lequel `/folders/` est relayé, par exemple `http://127.0.0.1:8788` (avec `SERVERS=folders`). |
 | `DOWNLOAD_MS` | `0` | Durée par chapitre de la file de téléchargement du faux Suwayomi. Avec `0`, un chapitre demandé est disponible aussitôt. |
 | `DOWNLOAD_FAIL` | `0` | Identifiant d'un chapitre qui échoue au premier téléchargement ; un nouvel essai réussit. |
+| `DOWNLOAD_FAIL_TIMES` | `1` | Nombre d'échecs du chapitre de `DOWNLOAD_FAIL` avant qu'un nouvel essai réussisse. |
 | `SOURCE_SLOW_MS` | `2500` | Délai de la source de démonstration lente dans la recherche chez les sources. |
 
 Exemple : `SERVERS=suwayomi SUWA_AUTH=ui node dev/mock-servers.mjs`.
+
+Raccourcir les délais de relance automatique (tests et développement seulement) : la clé `scrollarr.dev.retry` du `localStorage` du navigateur, posée depuis la console ou par le test avant le chargement de la page, remplace les délais de 1, 5 et 30 minutes, par exemple `localStorage.setItem('scrollarr.dev.retry', JSON.stringify({ delays: [1500, 1500, 1500], jitterMs: 300, claimMs: 5000 }))` (millisecondes ; `delays` fixe aussi le nombre de relances). Aucun écran n'écrit cette clé et une valeur invalide est ignorée. `scrollarr.autoRetry` à `0` coupe les relances automatiques, comme l'interrupteur de l'écran Téléchargements.
 
 Simuler un nouveau chapitre :
 

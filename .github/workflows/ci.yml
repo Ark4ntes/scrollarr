@@ -28,6 +28,8 @@ jobs:
         run: node tests/unit_collect.mjs
       - name: Shared task history (unit)
         run: node tests/unit_tasks_shared.mjs
+      - name: Automatic retry policy (unit)
+        run: node tests/unit_tasks_retry.mjs
       - name: Facade (unit)
         run: node tests/unit_facade.mjs
       - name: Profiles (unit)
@@ -82,6 +84,9 @@ jobs:
       - name: E2E shared task history (two devices)
         if: ${{ !cancelled() }}
         run: python tests/e2e_tasks_shared.py
+      - name: E2E automatic retry of failed downloads
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_tasks_retry.py
       - name: E2E reader without progress
         if: ${{ !cancelled() }}
         run: python tests/e2e_progress.py

@@ -29,6 +29,7 @@ node tests/unit_sync.mjs        # merge rules alone, no browser (instant)
 node tests/unit_contracts.mjs   # reader and collector contracts (instant)
 node tests/unit_tasks.mjs       # common task model (instant)
 node tests/unit_collect.mjs     # search by title and add: Suwayomi collector against a stubbed fetch (exact operations), isolated requests, source selection, parallelism bound, facade (instant)
+node tests/unit_tasks_retry.mjs   # automatic retry policy: delays, maximum, manual reset, claim between two devices, merge with the new fields (instant)
 node tests/unit_tasks_shared.mjs  # task history merged between devices: finished beats active, cleared stays cleared, bounds (instant)
 node tests/unit_folders_naming.mjs   # folders service: naming, natural sort, chapter numbers (instant)
 node tests/unit_folders_ids.mjs      # folders service: identifiers, path confinement (instant)
@@ -55,6 +56,7 @@ python tests/e2e_folders_progress.py  # folders reader on the REAL service: resu
 python tests/e2e_folders_profiles.py  # folders service next to the mock Suwayomi: a secondary profile on two devices, other profiles do not see it, deletion forgets it (~2 min)
 python tests/e2e_tasks.py       # collector tasks: progress, failure, cancellation, history (~40 s)
 python tests/e2e_search.py      # search the sources from the Search screen: nothing sent before the action, several sources, a failing and a slow one, add, source choice, offline, Komga only (~1 min)
+python tests/e2e_tasks_retry.py   # automatic retry: a chapter failing twice ends done, exhausted after three, setting off, two devices (backoff shortened by a localStorage key) (~2 min)
 python tests/e2e_tasks_shared.py  # task history shared by two devices through the servers' store: sync, retry, clearing (~1 min)
 ```
 

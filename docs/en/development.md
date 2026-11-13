@@ -32,9 +32,12 @@ Options, as environment variables:
 | `FOLDERS` | unset | Address of a real folders service to which `/folders/` is relayed, for example `http://127.0.0.1:8788` (with `SERVERS=folders`). |
 | `DOWNLOAD_MS` | `0` | Time per chapter of the mock Suwayomi's download queue. With `0`, a requested chapter is available at once. |
 | `DOWNLOAD_FAIL` | `0` | Id of a chapter that fails the first time it is downloaded; a retry succeeds. |
+| `DOWNLOAD_FAIL_TIMES` | `1` | How many times the chapter of `DOWNLOAD_FAIL` fails before a retry succeeds. |
 | `SOURCE_SLOW_MS` | `2500` | Delay of the slow demo source in the source search. |
 
 Example: `SERVERS=suwayomi SUWA_AUTH=ui node dev/mock-servers.mjs`.
+
+Shorten the automatic retry delays (tests and development only): the key `scrollarr.dev.retry` of the browser's `localStorage`, set from the console or by the test before the page loads, replaces the delays 1 min, 5 min, 30 min, for example `localStorage.setItem('scrollarr.dev.retry', JSON.stringify({ delays: [1500, 1500, 1500], jitterMs: 300, claimMs: 5000 }))` (milliseconds; `delays` sets the number of retries). No screen writes this key and an invalid value is ignored. `scrollarr.autoRetry` set to `0` turns the automatic retries off, like the switch on the Downloads screen.
 
 Simulate a new chapter:
 

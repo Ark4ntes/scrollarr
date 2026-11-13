@@ -9,6 +9,7 @@ B = 'http://localhost:8436'
 
 def device(b):
     ctx = b.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, locale='fr-FR')
+    ctx.add_init_script("localStorage.setItem('scrollarr.autoRetry', '0')")  # this test retries by hand
     return ctx.new_page()
 
 
