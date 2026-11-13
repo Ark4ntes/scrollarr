@@ -68,6 +68,8 @@ services:
     volumes:
       # Une bibliothèque = un montage sous /libraries, toujours en lecture seule (:ro).
       # Ajoutez une ligne par bibliothèque, sans sous-montage dans le dossier monté.
+      # Le dossier monté doit contenir directement les séries (un sous-dossier = une série,
+      # dedans un dossier d'images ou un CBZ/ZIP par chapitre). Schéma dans .env.example.
       - ${FOLDERS_SCANS_PATH:-./scans}:/libraries/Scans:ro
       - ./data/folders:/data
 
