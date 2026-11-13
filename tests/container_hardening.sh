@@ -78,7 +78,14 @@ for scenario in "${scenarios[@]}"; do
       check "main container starts with the hardening options and serves the page" wait_for page
       check "main container serves a script and servers.json" bash -c "curl -fs -m 3 -o /dev/null http://127.0.0.1:18382/js/config.js && curl -fs -m 3 http://127.0.0.1:18382/servers.json | grep -q suwayomi"
       check "nginx workers run as the nginx user (privileges dropped)" bash -c "docker exec 'sh-main-$tag' ps -o user,args | grep 'nginx: worker' | grep -q '^nginx'"
-      check "no new privileges, capabilities limited to the Compose set" bash -c "docker inspect -f '{{.HostConfig.SecurityOpt}} {{.HostConfig.CapDrop}} {{.HostConfig.CapAdd}}' 'sh-main-$tag' | grep -q 'no-new-privileges:true \[ALL\] \[CHOWN SETGID SETUID NET_BIND_SERVICE\]'"
+      # Docker peut renvoyer les capacités avec ou sans préfixe « CAP_ » et dans un autre ordre : on compare des ensembles.
+      caps_ok() { docker inspect "sh-main-$tag" | python3 -c '
+import json, sys
+h = json.load(sys.stdin)[0]["HostConfig"]
+norm = lambda xs: {x.upper().removeprefix("CAP_") for x in (xs or [])}
+ok = any("no-new-privileges" in o for o in (h.get("SecurityOpt") or [])) and norm(h.get("CapDrop")) == {"ALL"} and norm(h.get("CapAdd")) == {"CHOWN", "SETGID", "SETUID", "NET_BIND_SERVICE"}
+sys.exit(0 if ok else 1)'; }
+      check "no new privileges, capabilities limited to the Compose set" caps_ok
       check "the image's health check command succeeds in the hardened container" docker exec "sh-main-$tag" wget -q -O /dev/null http://127.0.0.1/servers.json
       ;;
     proxy)
@@ -97,7 +104,7 @@ require('http').createServer((q, r) => { r.setHeader('Content-Type', 'applicatio
       docker build -t "scrollarr-notifier:hardening-$tag" notifier >/dev/null
       echo "PASS notifier image built"
       mkdir -p "$work/notifier-data"; chmod 777 "$work/notifier-data"   # l'utilisateur « node » (1000) doit pouvoir y écrire
-      eval "docker run -d --name 'sh-notifier-$tag' --network '$net' $(opts notifier) $(envs notifier) -v '$work/notifier-data:/data' 'scrollarr-notifier:hardening-$tag'" >/dev/null
+      eval "docker run -d --name 'sh-notifier-$tag' --network '$net' $(opts notifier) $(envs notifier http://up.invalid:9000) -v '$work/notifier-data:/data' 'scrollarr-notifier:hardening-$tag'" >/dev/null
       inside() { docker exec "sh-notifier-$tag" node -e "$1"; }
       health() { inside "fetch('http://127.0.0.1:8787/health').then(r=>r.json()).then(j=>process.exit(j.ok===true?0:1),()=>process.exit(1))"; }
       check "notifier starts with the hardening options and answers /health" wait_for health
