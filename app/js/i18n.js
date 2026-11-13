@@ -239,6 +239,7 @@ const EN = {
   'Ajouter un profil': 'Add a profile',
   'Profil : {name}. Changer de profil': 'Profile: {name}. Switch profile',
   'Profil': 'Profile',
+  'Principal': 'Main',
   'Profil ouvert sur cet appareil : {name}.': 'Profile open on this device: {name}.',
   'Ajoutez un profil pour qu’une autre personne ait sa propre progression et ses propres abonnements.': 'Add a profile so that someone else gets their own progress and subscriptions.',
   'Changer de profil': 'Switch profile',

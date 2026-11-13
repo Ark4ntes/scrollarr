@@ -227,7 +227,7 @@ Do not mount a folder inside another mounted folder. What the service stores in 
 
 ## Health checks
 
-All three images declare a health check. `docker ps` (or Container Manager on a Synology) shows `healthy` or `unhealthy` next to each container: Scrollarr fetches `/servers.json` every 30 seconds, the notifier and the folders service answer on `/health`.
+All three images declare a health check. `docker ps` (or Container Manager on a Synology) shows `healthy` or `unhealthy` next to each container: Scrollarr fetches `/servers.json` every 30 seconds, the notifier and the folders service answer on `/health` (the folders service's answer is just `{"ok":true}`).
 
 ## What next
 

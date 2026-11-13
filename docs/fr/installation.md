@@ -227,7 +227,7 @@ Ne montez pas un dossier à l'intérieur d'un autre dossier monté. Ce que le se
 
 ## Surveillance de santé
 
-Les trois images déclarent une surveillance de santé. `docker ps` (ou Container Manager sur un Synology) affiche `healthy` ou `unhealthy` en face de chaque conteneur : Scrollarr interroge `/servers.json` toutes les 30 secondes, le notifier et le service Dossiers répondent sur `/health`.
+Les trois images déclarent une surveillance de santé. `docker ps` (ou Container Manager sur un Synology) affiche `healthy` ou `unhealthy` en face de chaque conteneur : Scrollarr interroge `/servers.json` toutes les 30 secondes, le notifier et le service Dossiers répondent sur `/health` (la réponse du service Dossiers se réduit à `{"ok":true}`).
 
 ## Et ensuite
 

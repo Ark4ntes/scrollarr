@@ -8,23 +8,30 @@
 //    de petits documents rangés sur le serveur (voir loadDocs/saveDoc dans
 //    api.js), ce qui les rend disponibles sur tous les appareils.
 import * as api from './api.js';
+import { t } from './i18n.js';
 import { mergeSeries, mergeIdx, mergeProfiles, compareStamp, deviceId } from './sync.js';
 
 const LIST_KEY = 'scrollarr.profiles';
 const ACTIVE_KEY = 'scrollarr.profile';
 const LIST_MIRROR = 'scrollarr.profiles.cache';
 const MAIN = 'main';
+// Nom par défaut du profil principal, tel qu'il est enregistré dans la liste partagée. Il reste le mot français :
+// les autres appareils (même plus anciens) et les listes déjà enregistrées le contiennent, et la fusion (sync.js)
+// compare des listes, pas des affichages. Il n'est traduit qu'à l'affichage (displayName).
+const MAIN_NAME = 'Principal';
 const RECENT_MAX = 40;
 
 const readJson = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
 
 // `entries` garde aussi les profils supprimés (marque `del`), pour que la suppression
 // se propage ; `profiles` ne contient que les profils vivants, ceux que l'on montre.
-let entries = mergeProfiles(readJson(LIST_MIRROR, null), [{ id: MAIN, name: 'Principal' }]);
+let entries = mergeProfiles(readJson(LIST_MIRROR, null), [{ id: MAIN, name: MAIN_NAME }]);
 let profiles = entries.filter((p) => !p.del);
 let activeId = localStorage.getItem(ACTIVE_KEY) || MAIN;
 
 export const list = () => profiles;
+/** Nom à montrer : le nom par défaut du profil principal est traduit, tout nom choisi par l'utilisateur est montré tel quel. */
+export const displayName = (p) => (p.id === MAIN && p.name === MAIN_NAME ? t('Principal') : p.name);
 export const active = () => profiles.find((p) => p.id === activeId) || profiles[0];
 export const isExtra = () => active().id !== MAIN;
 /** Plusieurs profils existent et cet appareil n'a pas encore dit lequel est le sien. */
@@ -68,6 +75,9 @@ export async function create(name) {
   return p;
 }
 export async function rename(id, name) {
+  name = name.trim();
+  // Valider tel quel le nom affiché du principal (« Main » en anglais) ne le fige pas dans une langue : on garde le nom par défaut.
+  if (id === MAIN && name === t('Principal')) name = MAIN_NAME;
   setEntries(entries.map((p) => (p.id === id ? stamped(p, { name: name.trim().slice(0, 30) }) : p)));
   localStorage.setItem(LIST_MIRROR, JSON.stringify(entries));
   await syncList({ write: true });

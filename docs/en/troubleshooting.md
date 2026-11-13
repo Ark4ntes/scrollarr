@@ -36,7 +36,7 @@ Find the symptom, read the cause, apply the fix. The tables come first; the comm
 | You read as another profile, but Suwayomi's or Komga's own interface shows nothing | Only the **main** profile uses the server's reading history. Another profile keeps its progress in Scrollarr's own documents on the server. | Expected. Read as the main profile if you want the server's history. |
 | You look for a profile's progress in `data/folders/progress/` and find nothing under `main` | There, the progress of another profile is under its **identifier**, a random code such as `p3k9x2a`, one folder per profile. The service does not know the names. | Look in the other folders; `main` holds the main profile only. |
 | A profile or subscription is different on another device | The profile open on a device, the servers switched on, and the interface settings are kept **per device**. Subscriptions are per profile and copied to every server that stores them (Suwayomi, Komga). With only *Folders*, subscriptions stay on the device. | Choose the same profile on both (*Settings > Profile > Switch profile*), switch on the same servers, reload. Two devices that change the same entry before seeing each other keep one of the two, the same on all devices. |
-| The main profile is called "Principal" in the English interface | That is the name given to it by the app, in French. | You can rename it: *Settings > Profile > Manage profiles*, then the menu next to it, *Rename*. |
+| The main profile is called "Principal" in the English interface | Version 0.9.0 and earlier stored and showed that French name. Since 0.9.1 it is shown as "Main" in English (the default name is translated when displayed). | Update. A name you chose yourself is never translated. You can rename it: *Settings > Profile > Manage profiles*, then the menu next to it, *Rename*. |
 | A subscription vanished | The app removes a subscription only when its series is reported as not found twice, at least 24 hours apart (series deleted on the server, or a folder renamed). | Subscribe again from the series page. |
 | "Profiles are not available with this server. Subscriptions stay on this device." | Only *Folders* is switched on: it has no key-value store. | Switch on Suwayomi or Komga too. |
 
@@ -48,7 +48,7 @@ Find the symptom, read the cause, apply the fix. The tables come first; the comm
 | *Folders* is *Unreachable* | The service is not started (profile missing from the command), or it refused to start. | `docker compose --profile folders up -d`, then `docker logs scrollarr-folders`. A line `Configuration invalide : ...` names the problem (`FOLDERS_AUTH` missing, password shorter than 12 characters...). |
 | The library shows zero series | `FOLDERS_SCANS_PATH` points to the wrong folder, or the service user cannot read it. | `docker exec scrollarr-folders ls /libraries/Scans` must list your series. Otherwise fix the path or the permissions ([Synology](synology.md#7-the-folders-service-on-a-nas)). |
 | A few "series" with hundreds of chapters | `FOLDERS_SCANS_PATH` is one level too high. | Point it to the folder that directly contains the series ([layout](installation.md#folder-layout)). |
-| The library is "unavailable" (`/folders/health` shows `"state":"unavailable"`) | The folder cannot be read, or is empty although it once held series: share not mounted, encrypted folder locked. The service answers 503 so that your subscriptions and downloads are kept. | Mount or unlock the share. If you emptied it on purpose, a scan must be requested (see `folders/README.md`). |
+| The library is "unavailable" (`/folders/api/v1/status` shows `"state":"unavailable"`) | The folder cannot be read, or is empty although it once held series: share not mounted, encrypted folder locked. The service answers 503 so that your subscriptions and downloads are kept. | Mount or unlock the share. If you emptied it on purpose, a scan must be requested (see `folders/README.md`). |
 | New files do not show up | Lists are re-read at most every 60 seconds (series) and 30 seconds (chapters). A full scan runs in the background every 15 minutes when someone opens the library. | Wait a minute, reopen the series. |
 | A renamed chapter lost its progress | A rename creates a new item. | Expected. Put the old name back to get the progress back (it is kept). |
 | Pages in the wrong order | The order is the natural sort of the names. | Rename the files or folders. |
@@ -102,7 +102,7 @@ Add `-f` to follow them live. The equivalent with Compose is `docker compose log
 curl http://192.168.1.10:8380/js/config.js
 ```
 
-prints a line `export const APP_VERSION = '0.9.0';`. (Not from the browser's address bar: the app would answer instead of the file.) Do not rely on the `version` field of `http://192.168.1.10:8380/folders/health`: it is the folders service's own number, not the release.
+prints a line `export const APP_VERSION = '0.9.1';`. (Not from the browser's address bar: the app would answer instead of the file.) The folders service's own number (`version` in `/folders/api/v1/status`) is not the release number.
 
 **Services answer.**
 
@@ -112,7 +112,7 @@ curl http://192.168.1.10:8380/notify/health
 curl http://192.168.1.10:8380/folders/health
 ```
 
-The first shows which servers are configured, as `{"komga":false,"suwayomi":true,"folders":false}`. The second answers `{"ok":true,"subscriptions":0}` when the notifier runs (a 404 means it does not). The third shows the folders service, its mode and the state of each library (`ok`, `scanning` or `unavailable`).
+The first shows which servers are configured, as `{"komga":false,"suwayomi":true,"folders":false}`. The second answers `{"ok":true,"subscriptions":0}` when the notifier runs (a 404 means it does not). The third answers `{"ok":true}` when the folders service runs, and nothing else: it is the public health probe. To see its version, its mode and the state of each library (`ok`, `scanning` or `unavailable`), open `http://192.168.1.10:8380/folders/api/v1/status` in the browser where you are signed in to the app (in `password` mode, the sign-in cookie is needed).
 
 **Check the addresses the container uses.**
 

@@ -37,7 +37,7 @@ Que faire : activez l'authentification de Suwayomi, ou gardez Scrollarr hors d'I
 
 **Komga.** L'application se connecte une fois avec votre e-mail et votre mot de passe ; Komga pose son propre cookie de session.
 
-**Service Dossiers en mode `password`.** Un utilisateur et un mot de passe partagés (`FOLDERS_USER`, `FOLDERS_PASSWORD`, au moins 12 caractères). Tout sauf `/health` demande une session : un cookie signé, `HttpOnly`, `SameSite=Strict`, `Secure` quand la requête indique être arrivée en HTTPS (`X-Forwarded-Proto: https`, que votre proxy inversé doit envoyer), valable `FOLDERS_SESSION_HOURS` heures (720 par défaut). Changer l'utilisateur ou le mot de passe déconnecte tout le monde. Après `FOLDERS_LOGIN_ATTEMPTS` connexions échouées (5) en `FOLDERS_LOGIN_WINDOW_SECONDS` secondes (900), le service répond par l'erreur 429. Le compte se fait par adresse *telle que le conteneur Scrollarr la voit* ; derrière un proxy inversé, c'est l'adresse du proxy, donc les échecs de personnes différentes s'additionnent (cela découle du code, je ne l'ai pas essayé).
+**Service Dossiers en mode `password`.** Un utilisateur et un mot de passe partagés (`FOLDERS_USER`, `FOLDERS_PASSWORD`, au moins 12 caractères). Tout sauf `/health` (qui répond seulement `{"ok":true}` : ni mode, ni version, ni nom de bibliothèque) demande une session : un cookie signé, `HttpOnly`, `SameSite=Strict`, `Secure` quand la requête indique être arrivée en HTTPS (`X-Forwarded-Proto: https`, que votre proxy inversé doit envoyer), valable `FOLDERS_SESSION_HOURS` heures (720 par défaut). Changer l'utilisateur ou le mot de passe déconnecte tout le monde. Après `FOLDERS_LOGIN_ATTEMPTS` connexions échouées (5) en `FOLDERS_LOGIN_WINDOW_SECONDS` secondes (900), le service répond par l'erreur 429. Le compte se fait par adresse *telle que le conteneur Scrollarr la voit* ; derrière un proxy inversé, c'est l'adresse du proxy, donc les échecs de personnes différentes s'additionnent (cela découle du code, je ne l'ai pas essayé).
 
 **Notifier.** Il garde, dans son environnement, la clé d'API de Komga et, si Suwayomi est protégé, les identifiants de Suwayomi. Il n'accepte un abonnement que d'un appelant dont les propres cookies sont acceptés par l'un de vos serveurs. Ses réponses `/vapid` et `/health` sont publiques.
 
@@ -61,7 +61,19 @@ Il faut le demander explicitement (`FOLDERS_AUTH=none`), et le service écrit un
 - Seules des images sont servies, reconnues à leurs premiers octets (JPEG, PNG, WebP, GIF, AVIF), jamais au nom du fichier. Tout le reste (SVG compris) est refusé.
 - Les archives sont lues sur place, avec des limites sur le nombre d'entrées, les tailles et le taux de compression. Une archive hostile ou démesurée est refusée avec une erreur lisible.
 - Les requêtes autres que `GET` doivent porter l'en-tête `X-Requested-With` et `Content-Type: application/json`, et une requête dont l'`Origin` ne correspond pas à l'hôte est refusée. Cela vaut aussi sur un réseau local.
-- Il tourne avec un système de fichiers en lecture seule, sans capacités Linux, `no-new-privileges`, 256 Mo de mémoire, et sur son propre réseau Docker interne : aucun port n'est publié, seul le conteneur Scrollarr l'atteint. (Le conteneur principal et le notifier n'ont pas ces restrictions.)
+- Il tourne avec un système de fichiers en lecture seule, sans capacités Linux, `no-new-privileges`, 256 Mo de mémoire, et sur son propre réseau Docker interne : aucun port n'est publié, seul le conteneur Scrollarr l'atteint.
+
+## Durcissement des conteneurs
+
+| Conteneur | Ce qui est appliqué (`docker-compose.yml`) | Ce qui ne l'est pas, et pourquoi |
+| --- | --- | --- |
+| `scrollarr` (nginx) | `no-new-privileges` ; toutes les capacités Linux retirées sauf `CHOWN`, `SETUID`, `SETGID` et `NET_BIND_SERVICE`. | Pas de système de fichiers en lecture seule : l'image officielle écrit sa configuration au démarrage (`/etc/nginx/conf.d`) et ses fichiers temporaires (`/var/cache/nginx`). Il démarre toujours en root, car nginx doit lier le port 80 puis confie ses processus de travail à l'utilisateur `nginx`. Pas de `pids_limit`. |
+| `notifier` | Tourne en `node` ; système de fichiers en lecture seule avec un `tmpfs` sur `/tmp` ; `no-new-privileges` ; toutes les capacités retirées. N'écrit que dans `/data`. | Pas de limite de mémoire ni de processus. |
+| `folders` | Voir plus haut : lecture seule, aucune capacité, `no-new-privileges`, 256 Mo, 64 processus, réseau interne. | Les scans montés sont en `:ro` ; `/data` est inscriptible (clé de session, progression). |
+
+Pourquoi ces quatre capacités pour nginx : le processus maître change le propriétaire de ses dossiers temporaires (`CHOWN`), passe ses processus de travail à l'utilisateur sans privilège `nginx` (`SETUID`, `SETGID`) et lie le port 80 (`NET_BIND_SERVICE`). Rien d'autre n'est nécessaire (`DAC_OVERRIDE` ne l'est pas : les fichiers appartiennent à root). Cela a été vérifié en lançant nginx avec un jeu de capacités réduit : sans l'une des quatre, il ne démarre pas ou ne perd pas ses privilèges. L'image officielle ne documente pas de jeu minimal ; si une version future en demande davantage, `tests/container_hardening.sh` échoue en CI.
+
+`pids_limit` n'est posé que sur `folders`, et il n'est pas appliqué sur un NAS dont l'ancien noyau n'a pas de cgroup PIDs ; les autres conteneurs n'en dépendent pas. `tests/container_hardening.sh` lance chaque conteneur avec exactement les options de `docker-compose.yml`.
 
 ## En-têtes envoyés par Scrollarr
 

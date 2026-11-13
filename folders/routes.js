@@ -107,7 +107,9 @@ export function createHandler({ config, auth, libraries, reading, progress, vers
     const get = req.method === 'GET';
 
     if (get && path === '/health') {
-      return send(res, 200, { ok: true, version, auth: config.auth, libraries: libraries.health() });
+      // Sans session : seulement ce qu'une sonde de santé exige. Mode d'authentification, version et état des
+      // bibliothèques sont servis par /api/v1/status, derrière la session.
+      return send(res, 200, { ok: true });
     }
 
     // ── Session ──
@@ -132,6 +134,9 @@ export function createHandler({ config, auth, libraries, reading, progress, vers
 
     // Tout le reste exige une session en mode password.
     if (auth.required && !auth.user(req)) return send(res, 401, { error: 'unauthorized' });
+
+    // Détails que /health ne donne plus : version du service, mode d'authentification, état de chaque bibliothèque.
+    if (get && path === '/api/v1/status') return send(res, 200, { version, auth: config.auth, libraries: libraries.health() });
 
     if (get && path === '/api/v1/libraries') return send(res, 200, libraries.libraries());
 

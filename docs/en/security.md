@@ -37,7 +37,7 @@ What to do: turn on Suwayomi's authentication, or keep Scrollarr off the Interne
 
 **Komga.** The app signs in with your email and password once; Komga sets its own session cookie.
 
-**Folders service in `password` mode.** One shared user name and password (`FOLDERS_USER`, `FOLDERS_PASSWORD`, at least 12 characters). Everything except `/health` needs a session: a signed cookie, `HttpOnly`, `SameSite=Strict`, `Secure` when the request says it came over HTTPS (`X-Forwarded-Proto: https`, which your reverse proxy must send), valid `FOLDERS_SESSION_HOURS` hours (720 by default). Changing the user name or password signs everyone out. After `FOLDERS_LOGIN_ATTEMPTS` failed sign-ins (5) in `FOLDERS_LOGIN_WINDOW_SECONDS` seconds (900), the service answers error 429. The count is per address *as the Scrollarr container sees it*; behind a reverse proxy, that is the proxy's address, so failed attempts from different people add up (this follows from the code, I have not tried it).
+**Folders service in `password` mode.** One shared user name and password (`FOLDERS_USER`, `FOLDERS_PASSWORD`, at least 12 characters). Everything except `/health` (which answers only `{"ok":true}`: no mode, version or library name) needs a session: a signed cookie, `HttpOnly`, `SameSite=Strict`, `Secure` when the request says it came over HTTPS (`X-Forwarded-Proto: https`, which your reverse proxy must send), valid `FOLDERS_SESSION_HOURS` hours (720 by default). Changing the user name or password signs everyone out. After `FOLDERS_LOGIN_ATTEMPTS` failed sign-ins (5) in `FOLDERS_LOGIN_WINDOW_SECONDS` seconds (900), the service answers error 429. The count is per address *as the Scrollarr container sees it*; behind a reverse proxy, that is the proxy's address, so failed attempts from different people add up (this follows from the code, I have not tried it).
 
 **Notifier.** It holds, in its environment, the Komga API key and, if Suwayomi is protected, the Suwayomi credentials. It accepts a subscription only from a caller whose own cookies are accepted by one of your servers. Its `/vapid` and `/health` answers are public.
 
@@ -61,7 +61,19 @@ You must ask for it explicitly (`FOLDERS_AUTH=none`), and the service logs a war
 - Only images are served, recognised by their first bytes (JPEG, PNG, WebP, GIF, AVIF), never by the file name. Anything else (SVG included) is refused.
 - Archives are read in place, with limits on entries, sizes and compression ratio. Hostile or oversized archives are refused with a readable error.
 - Requests other than `GET` must carry the header `X-Requested-With` and `Content-Type: application/json`, and a request whose `Origin` does not match the host is refused. This applies on a local network too.
-- It runs with a read-only filesystem, no Linux capabilities, `no-new-privileges`, 256 MB of memory, and on an internal Docker network of its own: no port is published, only the Scrollarr container reaches it. (The main container and the notifier have no such restrictions.)
+- It runs with a read-only filesystem, no Linux capabilities, `no-new-privileges`, 256 MB of memory, and on an internal Docker network of its own: no port is published, only the Scrollarr container reaches it.
+
+## Hardening of the containers
+
+| Container | What is applied (`docker-compose.yml`) | What is not, and why |
+| --- | --- | --- |
+| `scrollarr` (nginx) | `no-new-privileges`; all Linux capabilities dropped except `CHOWN`, `SETUID`, `SETGID` and `NET_BIND_SERVICE`. | No read-only filesystem: the official image writes its configuration at start (`/etc/nginx/conf.d`) and its temporary files (`/var/cache/nginx`). It still starts as root, because nginx needs to bind port 80 and then hands its workers to the `nginx` user. No `pids_limit`. |
+| `notifier` | Runs as `node`; read-only filesystem with a `tmpfs` on `/tmp`; `no-new-privileges`; all capabilities dropped. Writes only to `/data`. | No memory or process limit. |
+| `folders` | See above: read-only filesystem, no capabilities, `no-new-privileges`, 256 MB, 64 processes, internal network. | The mounted scans are `:ro`; `/data` is writable (session key, progress). |
+
+Why these four capabilities for nginx: the master process changes the owner of its temporary directories (`CHOWN`), switches its workers to the unprivileged `nginx` user (`SETUID`, `SETGID`) and binds port 80 (`NET_BIND_SERVICE`). Nothing else is needed (`DAC_OVERRIDE` is not: the files are owned by root). This was checked by starting nginx under a reduced capability set: without any one of the four, it fails to start or to drop privileges. The official image has no documented minimal set; if a future image version asks for more, `tests/container_hardening.sh` fails in CI.
+
+`pids_limit` is set only on `folders`, and it is not enforced on a NAS whose old kernel has no PIDs cgroup; the other containers do not depend on it. `tests/container_hardening.sh` starts each container with exactly the options of `docker-compose.yml`.
 
 ## Headers sent by Scrollarr
 

@@ -6,10 +6,12 @@ Ce document décrit ce que fait le service quand il **lit les contenus**, commen
 
 ## Routes de lecture
 
-Chemins vus par le service ; l'application y accède sous `/folders/…`. Toutes exigent une session en mode `password`.
+Chemins vus par le service ; l'application y accède sous `/folders/…`. Toutes exigent une session en mode `password`, sauf `/health`.
 
 | Route | Réponse |
 | --- | --- |
+| `GET /health` | Sans session, pour la sonde du conteneur : `{ ok: true }` et rien d'autre (ni mode d'authentification, ni version, ni nom de bibliothèque). |
+| `GET /api/v1/status` | `{ version, auth, libraries: [{ name, state }] }` : version du service, mode d'authentification, état de chaque bibliothèque (`ok`, `scanning`, `unavailable`). Session requise en mode `password`. |
 | `GET /api/v1/books/{bid}/pages` | `[{ number, mediaType }]`, numéros à partir de 1. `mediaType` est **indicatif** : il vient de l'extension, car la liste ne lit aucun contenu. |
 | `GET /api/v1/books/{bid}/pages/{n}` | L'image, telle quelle. Son `Content-Type` vient des premiers octets du fichier. |
 | `GET /api/v1/series/{sid}/thumbnail` | La couverture de la série, telle quelle. |
