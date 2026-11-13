@@ -59,9 +59,9 @@ function create(base) {
   }
 
   /** Une requête GraphQL, sans reprise automatique. Lève AuthError si la session est refusée. */
-  async function raw(op, variables, { timeout, keepalive, probe } = {}) {
+  async function raw(op, variables, { timeout, keepalive, probe, isolated } = {}) {
     const res = await send(ID, base + '/api/graphql', {
-      method: 'POST', body: { operationName: op, query: Q[op], variables }, timeout, keepalive, probe,
+      method: 'POST', body: { operationName: op, query: Q[op], variables }, timeout, keepalive, probe, isolated,
     });
     if (res.status === 401) { const e = new AuthError('Non connecté'); e.http = true; throw e; }
     if (!res.ok) throw new ApiError(res.status);

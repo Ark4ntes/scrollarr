@@ -28,6 +28,7 @@ Projet indépendant, sans lien avec Suwayomi, Komga ni aucun service de lecture 
 - **Bibliothèque** : filtres par bibliothèque ou catégorie, genre, état de lecture ; tri ; recherche.
 - **Abonnements** : suivez une série, un badge « UP » signale les chapitres arrivés depuis votre dernière visite. La liste est recopiée sur vos serveurs pour vous suivre d'un appareil à l'autre.
 - **Hors ligne** : téléchargez des chapitres sur l'appareil et lisez-les sans connexion.
+- **Ajout depuis les sources** (avec Suwayomi) : depuis l'écran de recherche, l'action explicite « Chercher chez les sources » cherche le titre dans les sources de votre Suwayomi et l'ajoute à la bibliothèque ; sa fiche propose ensuite le menu de téléchargement habituel. Rien n'est envoyé à une source tant que vous ne le demandez pas.
 - **Notifications push** (service facultatif) quand un chapitre arrive dans une série suivie.
 - Thème clair ou sombre, interface en français et en anglais.
 
@@ -83,11 +84,11 @@ L'application est du JavaScript natif en modules ES, sans étape de compilation 
 
 Prérequis : Docker, au moins un serveur (Suwayomi ou Komga) qui fonctionne, et une adresse **HTTPS** pour Scrollarr (obligatoire pour l'installation sur l'écran d'accueil, le mode hors ligne et les notifications).
 
-Scrollarr est publié sous forme d'image prête à l'emploi : inutile de copier le dépôt. Les images (`ghcr.io/ark4ntes/scrollarr` et `ghcr.io/ark4ntes/scrollarr-notifier`, pour `amd64` et `arm64`) sont publiées lorsqu'une étiquette de version est poussée. Tant que la première version n'est pas sortie, construisez l'image depuis un clone (voir l'alternative ci-dessous).
+Scrollarr est publié sous forme d'images prêtes à l'emploi : inutile de copier le dépôt. Les trois images (`ghcr.io/ark4ntes/scrollarr`, `scrollarr-notifier` et `scrollarr-folders`, pour `amd64` et `arm64`) portent le même numéro de version et sont publiées à chaque version. Si aucune version n'est encore listée dans les *Releases* du dépôt, construisez les images depuis un clone (voir l'alternative ci-dessous).
 
 1. Créez un dossier sur la machine, par exemple `/volume1/docker/scrollarr`, et téléchargez-y les deux fichiers nécessaires :
    ```sh
-   curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/docker-compose.yml
+   curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/deploy/docker-compose.yml
    curl -o .env https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/.env.example
    ```
    Modifiez `.env` : renseignez `SUWAYOMI_URL` et/ou `KOMGA_URL`, l'adresse de chaque serveur vue depuis le conteneur (par exemple `http://192.168.1.10:4567`). Laissez vide celui que vous n'utilisez pas. Pour lire de simples dossiers à la place, voir *Service Dossiers* plus bas (`FOLDERS_URL`).
@@ -98,6 +99,16 @@ Scrollarr est publié sous forme d'image prête à l'emploi : inutile de copier 
    L'application répond sur le port `8380` (modifiable avec `SCROLLARR_PORT`).
 3. Publiez-la en HTTPS avec votre proxy inverse. Sur un NAS Synology : *Panneau de configuration > Portail de connexion > Avancé > Proxy inversé*, source `https://scrollarr.exemple.fr:443`, destination `http://localhost:8380`, puis associez le certificat dans *Sécurité > Certificat*.
 4. Ouvrez l'adresse. Si un serveur demande une authentification, Scrollarr affiche son formulaire ; sinon vous arrivez directement sur l'accueil.
+
+### Mettre à jour
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+puis rechargez l'application deux fois dans le navigateur (ou acceptez le message de mise à jour) : chaque appareil garde l'ancienne version en cache jusque-là. Ajoutez `--profile push` ou `--profile folders` aux deux commandes si vous utilisez ces services. La version installée s'affiche dans *Réglages > À propos*.
+
+Pour figer une version ou revenir à la précédente, mettez son numéro dans `.env` (`SCROLLARR_VERSION=0.9.0`, ou `0.9` pour ne recevoir que les correctifs de cette série) et relancez `docker compose up -d`. Vos réglages sont dans `.env`, les données des services facultatifs dans `./data` : une mise à jour n'y touche pas.
 
 **Alternative : depuis un clone.** Copiez le dépôt, puis `cp .env.example .env`, renseignez-le comme ci-dessus et lancez `docker compose up -d --build` : les images sont construites localement au lieu d'être téléchargées.
 
@@ -120,6 +131,23 @@ node dev/check-suwayomi.mjs http://192.168.1.10:4567
 ```
 
 Le script rejoue les requêtes de lecture de Scrollarr contre votre serveur et indique celles qu'il refuse. Il ne modifie rien.
+
+### Chercher et ajouter depuis les sources de Suwayomi
+
+Sur l'écran de recherche, sous les résultats de la bibliothèque, **Chercher chez les sources de Suwayomi** demande à Suwayomi de chercher le titre dans les sources (extensions) choisies, trois au plus en même temps. Les résultats sont groupés par source, avec leur couverture et leur langue ; « Ajouter » met la série dans votre bibliothèque Suwayomi, récupère sa liste de chapitres et ouvre sa fiche, où s'applique le menu de téléchargement (« Faire télécharger toute la série par Suwayomi »). Un titre déjà dans la bibliothèque ouvre sa fiche. Une source en échec ou lente affiche sa propre erreur sans arrêter les autres. Les sources interrogées se choisissent depuis ce même écran (« Choisir les sources ») et le choix est gardé sur l'appareil ; par défaut, les sources dans la langue de l'interface ou multilingues, et jamais celles que Suwayomi signale 18+ (à cocher vous-même). L'action est absente quand aucun collecteur ne sait chercher (Komga, Dossiers) et remplacée par une explication quand le serveur est injoignable ; rien n'est mis en attente.
+
+À savoir : une recherche fait interroger des sites tiers par Suwayomi, elle peut donc être lente ou échouer, et Suwayomi range chaque résultat dans sa base (hors bibliothèque), comme pour sa propre interface. Une série tout juste ajoutée peut n'afficher auteur, résumé et genres qu'une fois initialisée par la mise à jour de Suwayomi (l'ajout l'y met en file).
+
+Les opérations utilisées, vérifiées dans les sources de Suwayomi-Server (voir `app/js/connectors/suwayomi-queries.js`), identiques de la v2.0.1727 à la v2.4.2366 et à la branche de développement :
+
+| Usage | Opération |
+| --- | --- |
+| Sources installées (id, nom, langue, icône, indicateur 18+) | `query { sources { nodes { id name lang iconUrl isNsfw } } }` (lecture seule, aucune source n'est contactée) |
+| Chercher dans une source, première page | `mutation { fetchSourceManga(input: { source: LongString!, type: SEARCH, page: 1, query }) { hasNextPage mangas { id title thumbnailUrl inLibrary } } }` |
+| Ajouter à la bibliothèque | `mutation { updateManga(input: { id, patch: { inLibrary: true } }) { manga { id inLibrary } } }` |
+| Récupérer la liste des chapitres chez la source | `mutation { fetchChapters(input: { mangaId }) { chapters { id } } }` |
+
+`dev/check-suwayomi.mjs` rejoue celle qui est en lecture seule ; la recherche et l'ajout ne le sont pas, car ils contactent des sites tiers et écrivent sur le serveur. Pas encore essayé sur un vrai Suwayomi.
 
 ### Sécurité
 
@@ -267,17 +295,28 @@ Un collecteur va chercher des chapitres ; il n'a pas à lister une bibliothèque
 | Membre | Rôle |
 | --- | --- |
 | `id`, `label` | Identifiant et nom affiché |
-| `capabilities` | Parmi les capacités « collecteurs » de `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`) |
+| `capabilities` | Parmi les capacités « collecteurs » de `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`, `collect.sources`, `collect.search`, `collect.add`) |
 | `serves` | Lecteurs dont il comprend les identifiants de chapitre (`['suwayomi']`) ; vide s'il n'en partage avec aucun |
 | `session` | Nom du lecteur dont il réutilise la session. Sans cela, le collecteur a son propre serveur et fournit `session()`, `login()`, `logout()` |
 | `collectChapters(readerId, chapterIds)` | Avec `collect.chapters` : récupérer des chapitres désignés par les identifiants de ce lecteur |
 | `tasks()`, `resolveTasks(nativeIds)` | Avec `collect.tasks` : ce que le collecteur fait en ce moment, et ce que sont devenues les tâches qu'il ne liste plus |
 | `cancelTask(nativeId)` | Avec `collect.cancel` |
 | `retryTask(nativeId)` | Avec `collect.retry` : relancer une tâche en échec ou annulée |
+| `sources()` | Avec `collect.sources` : où il sait chercher, sous la forme `[{ id, label, language, nsfw, icon }]` |
+| `search(sourceId, query)` | Avec `collect.search` (exige `collect.sources`) : chercher un titre dans une source, renvoie `{ results, more }` |
+| `add(resultId)` | Avec `collect.add` (exige `collect.search`) : ajouter ou suivre un résultat, renvoie `{ reader, seriesId, complete }` |
 
-Les tâches de tous les collecteurs sont ramenées à une seule forme par `app/js/tasks.js` : identifiant, collecteur, série et chapitre, état (`queued`, `running`, `done`, `failed`, `cancelled`), progression, dates de création, de début et de fin, erreur, nombre de tentatives, et possibilité d'annuler. L'application garde ce qu'un collecteur oublie (dates, tâches terminées). Les réglages n'en montrent qu'un résumé (collecteurs, nombre de téléchargements actifs) ; le détail est sur un écran secondaire ouvert depuis là, avec les téléchargements en cours, la file d'attente, les erreurs et l'historique, et les actions d'annulation et de relance que chaque collecteur permet. La collecte n'a jamais d'onglet à elle : elle reste en arrière-plan tant qu'on ne vient pas la regarder. Cet historique est propre à chaque appareil, et les dates que le collecteur ne fournit pas sont celles où l'application a constaté le changement.
+Les tâches de tous les collecteurs sont ramenées à une seule forme par `app/js/tasks.js` : identifiant, collecteur, série et chapitre, état (`queued`, `running`, `done`, `failed`, `cancelled`), progression, dates de création, de début et de fin, erreur, nombre de tentatives, et possibilité d'annuler. L'application garde ce qu'un collecteur oublie (dates, tâches terminées). Les réglages n'en montrent qu'un résumé (collecteurs, nombre de téléchargements actifs) ; le détail est sur un écran secondaire ouvert depuis là, avec les téléchargements en cours, la file d'attente, les erreurs et l'historique, et les actions d'annulation et de relance que chaque collecteur permet. La collecte n'a jamais d'onglet à elle : elle reste en arrière-plan tant qu'on ne vient pas la regarder. L'historique des tâches terminées est partagé entre appareils : un document unique pour l'installation (pas par profil) dans le stockage clé-valeur des serveurs, fusionné par identifiant de tâche (une tâche terminée l'emporte sur la même tâche encore active ailleurs, sauf si celle-ci est une nouvelle demande ; « Effacer l'historique » laisse des marques que les autres appareils respectent). Les tâches en cours ne sont pas partagées : chaque appareil les reçoit du collecteur. Sans serveur offrant ce stockage, l'historique reste propre à chaque appareil. Les dates que le collecteur ne fournit pas sont celles où l'application a constaté le changement.
 
-Il s'inscrit sous `COLLECTORS` dans `app/js/connectors/index.js`. Il n'existe pas encore de moyen de lancer une collecte à partir d'un titre : un collecteur qui part d'une recherche par titre plutôt que des identifiants d'un lecteur (Tranga, par exemple) demandera une nouvelle capacité, et les écrans qui vont avec.
+Un collecteur peut aussi partir d'un titre plutôt que d'un chapitre qu'un lecteur affiche déjà, avec les trois capacités de recherche, chacune exigeant la précédente. Les formes sont décrites en tête de `collector-contract.js`, où `normalizeSource`, `normalizeResult`, `normalizeSearch` et `normalizeAdded` les vérifient :
+
+- Une **source** est `{ id, label, language, nsfw, icon }`. `nsfw` est l'indication du serveur lui-même ; l'application ne cherche pas dans ces sources tant qu'on ne les a pas choisies.
+- Un **résultat** est `{ id, title, cover, sourceId, sourceLabel, language, inLibrary, reader, seriesId }`. `id` est propre au collecteur et opaque pour l'application, qui le rend tel quel à `add()`. `cover` et l'`icon` d'une source sont des chemins de même origine (par le proxy), jamais des adresses externes : la politique de sécurité n'autorise aucune image externe. `inLibrary` dit que le collecteur le tient déjà. `reader` et `seriesId` désignent la série correspondante d'un lecteur que le collecteur sert, tous deux ou aucun, et seulement si `inLibrary`.
+- `add()` renvoie `{ reader, seriesId, complete }` : la série qui existe désormais chez le lecteur, et `complete: false` si elle est ajoutée mais que sa liste de chapitres n'a pas encore pu être récupérée.
+- Un collecteur qui ne partage aucun identifiant avec un lecteur (Tranga, Mangarr) déclare un `serves` vide et renvoie `reader: null, seriesId: null` partout où Suwayomi renvoie une série du lecteur. Il peut quand même dire `inLibrary: true` (« déjà suivi »), mais la série n'existe chez un lecteur qu'une fois ses fichiers récupérés et scannés, et on ne sait pas laquelle avant. L'application ne propose alors aucun lien.
+- Une recherche interroge des sites tiers : l'application n'en lance une que sur une action explicite de l'utilisateur, une source à la fois avec un parallélisme borné, et une source en échec ne fait jamais échouer les autres. `search()` lève une erreur pour cette seule source.
+
+Il s'inscrit sous `COLLECTORS` dans `app/js/connectors/index.js`.
 
 ## État du projet et limites connues
 
@@ -285,6 +324,7 @@ Il s'inscrit sous `COLLECTORS` dans `app/js/connectors/index.js`. Il n'existe pa
 - **Sur de vrais serveurs** : utilisé par son auteur avec Suwayomi-Server 2.3 et Komga (lecture, progression, profils). Pas encore essayé sur Safari iOS. `dev/check-suwayomi.mjs` permet de vérifier la compatibilité avec votre version de Suwayomi.
 - L'envoi réel des notifications (au-delà de l'abonnement et de la détection des nouveaux chapitres) n'a pas été exécuté.
 - Un chapitre Suwayomi non téléchargé est récupéré chez la source à l'ouverture : le premier affichage peut prendre plusieurs secondes, et dépend du bon fonctionnement de l'extension.
+- La recherche dans les sources de Suwayomi et l'ajout d'une série (COL-001/COL-002) ne sont couverts que par des tests contre le faux serveur : pas essayés sur un vrai Suwayomi, et seule la première page de résultats de chaque source est affichée. Il n'y a pas encore de suivi ni de téléchargement automatique des nouveaux chapitres.
 - Les doublons entre serveurs sont reconnus par leur titre uniquement.
 - Les appareils qui partagent un profil secondaire sont fusionnés entrée par entrée (progression des chapitres, historique, abonnements). Chaque entrée porte un numéro de révision et l'identifiant de l'appareil qui l'a écrite : le résultat ne dépend pas de l'heure des appareils. Quand deux appareils modifient la même entrée sans s'être vus, l'une des deux est conservée — la même sur tous les appareils — mais rien ne permet de savoir laquelle était réellement la dernière.
 - Les abonnements du profil principal sont fusionnés de la même façon ; sa progression de lecture est celle du serveur et suit les règles du serveur.
@@ -298,7 +338,6 @@ Politique de sécurité : [SECURITY.md](SECURITY.md). Guide de contribution : [C
 La feuille de route complète et son état actuel figurent dans [docs/ROADMAP.md](docs/ROADMAP.md) (en français).
 
 - Applications iOS et Android en enveloppant ce même code avec [Capacitor](https://capacitorjs.com) ; il faudra alors remplacer les sessions de même origine par des jetons et charger les images par `fetch`.
-- Parcourir les sources de Suwayomi et ajouter un manga à la bibliothèque depuis Scrollarr.
 - Connecteurs pour d'autres serveurs (Kavita…).
 - Mode double page sur tablette en paysage.
 

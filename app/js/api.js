@@ -7,7 +7,7 @@
 import { READERS, COLLECTORS } from './connectors/index.js';
 import { CAP } from './connectors/contract.js';
 import { validateReader } from './connectors/reader-contract.js';
-import { validateCollector } from './connectors/collector-contract.js';
+import { validateCollector, normalizeSource, normalizeSearch, normalizeAdded } from './connectors/collector-contract.js';
 import * as tasksModel from './tasks.js';
 import { events, isReachable, retryNow, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
 import { idb } from './idb.js';
@@ -456,16 +456,103 @@ export async function serverDownload(bookIds) {
   refreshTasks().catch(() => {});
 }
 
+// ───────────── Chercher chez les sources et ajouter une série ─────────────
+
+// Un collecteur qui sait chercher par titre (collect.search). Aujourd'hui un seul : on prend le premier utilisable.
+// Rien n'est envoyé aux sources sans appel explicite de l'écran : ces fonctions ne sont jamais appelées en arrière-plan.
+const searcher = () => collectors.find((k) => k.capabilities.includes(CAP.COLLECT_SEARCH) && collectorUsable(k));
+const needSearcher = () => searcher() || (() => { throw new Error('Aucun collecteur ne sait chercher'); })();
+/** Vrai si un collecteur utilisable sait chercher par titre : sinon l'écran de recherche n'en parle pas. */
+export const canSearchSources = () => !!searcher();
+/** Identifiant et nom du collecteur qui chercherait. */
+export const searchCollector = () => { const k = searcher(); return k ? { id: k.id, label: k.label } : null; };
+/** La recherche a besoin du serveur : hors ligne ou serveur injoignable, elle n'est pas proposée. */
+export const canSearchNow = () => canSearchSources() && isReachable() && navigator.onLine !== false;
+
+const sourceLists = memo(60000);
+/** Les sources du collecteur, au format du contrat. Lecture locale sur le serveur : aucune source n'est contactée. */
+export function sources() {
+  const k = needSearcher();
+  return sourceLists(k.id, async () => (await k.sources()).map((s) => normalizeSource(k, s)));
+}
+
+/** Les identifiants de série du collecteur sont ceux d'un lecteur : on y met le préfixe de la façade. */
+function tagResult(k, r) {
+  const reader = r.reader && servers.find((s) => s.c.id === r.reader)?.c;
+  return { ...r, collector: k.id, reader: reader ? r.reader : null, seriesId: reader && r.seriesId ? `${reader.code}:${r.seriesId}` : null };
+}
+/** Cherche un titre dans une source. Lève une erreur pour cette source seule. */
+export async function searchSource(sourceId, query) {
+  const k = needSearcher();
+  const res = normalizeSearch(k, await k.search(sourceId, query));
+  return { more: res.more, results: res.results.map((r) => tagResult(k, r)) };
+}
+
+/**
+ * Ajoute un résultat. La série apparaît ensuite dans la bibliothèque : les mémoires du lecteur et de la façade sont
+ * vidées. Renvoie l'identifiant de la série (préfixé), ou null si le collecteur n'a pas de série à ouvrir.
+ */
+export async function addFromSource(result) {
+  const k = collectors.find((x) => x.id === result.collector && x.capabilities.includes(CAP.COLLECT_ADD) && collectorUsable(x));
+  if (!k) throw new Error('Ajout impossible');
+  const added = normalizeAdded(k, await k.add(result.id));
+  titles.clear(); merged.clear();
+  const { seriesId } = tagResult(k, { ...added, inLibrary: true });
+  return { seriesId, complete: added.complete };
+}
+
 // ───────────── Tâches de collecte (modèle commun : tasks.js) ─────────────
 
 const TASKS_KEY = 'scrollarr.tasks';
 let taskList = readJson(TASKS_KEY, []);
 export const taskEvents = new EventTarget();
-function setTasks(list) {
+// Pierres tombales de « Effacer l'historique » (voir tasks.js), conservées avec la liste.
+const CLEARED_KEY = 'scrollarr.tasks.cleared';
+let taskCleared = readJson(CLEARED_KEY, {});
+/** Remplace la liste locale. Si ce qui est partagé change (tâches terminées, effacements), prépare l'envoi aux serveurs. */
+function setTasks(list, { cleared = taskCleared, share = true } = {}) {
+  const before = share ? JSON.stringify(tasksModel.sharedView({ tasks: taskList, cleared: taskCleared })) : null;
   taskList = list;
-  try { localStorage.setItem(TASKS_KEY, JSON.stringify(list)); } catch { /* stockage plein : le suivi reste en mémoire */ }
+  taskCleared = cleared;
+  try {
+    localStorage.setItem(TASKS_KEY, JSON.stringify(list));
+    localStorage.setItem(CLEARED_KEY, JSON.stringify(cleared));
+  } catch { /* stockage plein : le suivi reste en mémoire */ }
   taskEvents.dispatchEvent(new Event('change'));
+  if (share && JSON.stringify(tasksModel.sharedView({ tasks: taskList, cleared: taskCleared })) !== before) { taskGen++; pushTasks(); }
 }
+
+// Historique partagé : un seul document pour toute l'installation (les tâches
+// sont celles du collecteur, pas d'un profil), rangé dans le stockage
+// clé-valeur des serveurs comme les abonnements. Lecture, fusion, écriture ;
+// un changement local pendant l'échange repart ensuite. Les échecs sont
+// silencieux et réessayés plus tard. Sans stockage, l'historique reste par appareil.
+const TASKS_DOC = 'scrollarr.tasks';
+let taskGen = 0;          // augmente à chaque changement local de ce qui est partagé
+let taskSyncing = false;
+let taskPulledAt = 0;
+let taskPushTimer;
+const pushTasks = () => { clearTimeout(taskPushTimer); taskPushTimer = setTimeout(() => syncTasks(true), 800); };
+async function syncTasks(write) {
+  if (taskSyncing || !hasStore() || !canTrackTasks()) return;
+  taskSyncing = true;
+  try {
+    let text;
+    try { text = await getClientSetting(TASKS_DOC); } catch { return; } // serveur injoignable : on réessaiera, sans rien écraser
+    let remote = null;
+    try { remote = JSON.parse(text); } catch { /* rien d'enregistré */ }
+    taskPulledAt = Date.now();
+    const gen = taskGen;
+    const union = tasksModel.mergeTasks({ tasks: taskList, cleared: taskCleared }, remote);
+    if (JSON.stringify(union) !== JSON.stringify({ tasks: taskList, cleared: taskCleared })) { setTasks(union.tasks, { cleared: union.cleared, share: false }); merged.clear(); }
+    const doc = JSON.stringify(tasksModel.sharedView(union));
+    if (write || doc !== JSON.stringify(tasksModel.sharedView(remote))) {
+      try { await setClientSetting(TASKS_DOC, doc); } catch { taskPulledAt = 0; return; }
+    }
+    if (taskGen !== gen) pushTasks();
+  } finally { taskSyncing = false; }
+}
+
 const trackers = () => collectors.filter((k) => k.capabilities.includes(CAP.COLLECT_TASKS) && collectorUsable(k));
 const collectorLabel = (id) => collectors.find((k) => k.id === id)?.label || id;
 
@@ -512,6 +599,7 @@ export async function refreshTasks() {
     }
   }
   if (JSON.stringify(list) !== JSON.stringify(taskList)) { setTasks(list); merged.clear(); }
+  if (Date.now() - taskPulledAt > 15000) syncTasks(false).catch(() => {}); // sans attendre : l'écran ne dépend pas des serveurs
   return tasks();
 }
 
@@ -538,7 +626,10 @@ export async function clearTaskHistory() {
   for (const task of taskList.filter((x) => x.state === 'failed')) {
     if (collectorCan(task.collector, CAP.COLLECT_CANCEL)) await collectors.find((k) => k.id === task.collector).cancelTask(task.nativeId).catch(() => {});
   }
-  setTasks(taskList.filter(tasksModel.isActive));
+  // Les tâches effacées laissent une pierre tombale, pour que les autres appareils ne les ramènent pas.
+  const cleared = { ...taskCleared };
+  for (const task of taskList.filter(tasksModel.isFinished)) cleared[task.id] = Math.max(cleared[task.id] ?? 0, task.finishedAt || 0);
+  setTasks(taskList.filter(tasksModel.isActive), { cleared });
 }
 
 // ───────────── Réglages conservés sur les serveurs ─────────────

@@ -33,8 +33,13 @@ export const retryNow = () => failedAt.clear();
 /**
  * Requête HTTP vers un serveur placé derrière le proxy de même origine.
  * Renvoie la réponse brute : chaque connecteur l'interprète à sa façon.
+ *
+ * `isolated` : la requête dépend d'un site tiers (recherche dans une source). Si ce site est lent, ou si la
+ * passerelle abandonne en 502-504 à cause de lui, cela ne dit rien du serveur : on lève une ApiError (408 pour
+ * notre délai) sans déclarer le serveur injoignable, ce qui bloquerait toutes les requêtes suivantes. Une vraie
+ * coupure réseau reste signalée comme d'habitude.
  */
-export async function send(serverId, url, { method = 'GET', body, headers, timeout = 15000, keepalive, probe = false } = {}) {
+export async function send(serverId, url, { method = 'GET', body, headers, timeout = 15000, keepalive, probe = false, isolated = false } = {}) {
   if (probe) timeout = Math.min(timeout, PROBE_TIMEOUT);
   // Appareil sans réseau, ou serveur qui vient de ne pas répondre : on n'attend pas.
   else if (navigator.onLine === false || Date.now() - (failedAt.get(serverId) || 0) < BREAK_MS) {
@@ -62,13 +67,17 @@ export async function send(serverId, url, { method = 'GET', body, headers, timeo
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
+    if (isolated && ctrl.signal.aborted) throw new ApiError(408, 'Délai dépassé');
     setReachable(serverId, false);
     throw new OfflineError('Serveur injoignable');
   } finally {
     clearTimeout(timer);
   }
   // Le service worker ou le proxy répondent 502/503/504 quand le serveur est arrêté.
-  if (res.status >= 502 && res.status <= 504) { setReachable(serverId, false); throw new OfflineError('Serveur injoignable'); }
+  if (res.status >= 502 && res.status <= 504) {
+    if (isolated) throw new ApiError(res.status);
+    setReachable(serverId, false); throw new OfflineError('Serveur injoignable');
+  }
   // Un proxy placé devant Scrollarr qui refuse l'accès (hors du réseau autorisé) répond par une
   // page HTML ; les serveurs, eux, répondent en JSON. On le traite comme un serveur injoignable.
   if (res.status === 403 && (res.headers.get('Content-Type') || '').includes('text/html')) { setReachable(serverId, false); throw new OfflineError('Serveur injoignable'); }

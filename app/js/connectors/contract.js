@@ -36,6 +36,12 @@ export const CAP = Object.freeze({
   COLLECT_CANCEL: 'collect.cancel',
   /** Relancer une tâche en échec ou annulée (méthode `retryTask`). */
   COLLECT_RETRY: 'collect.retry',
+  /** Dire où il sait chercher : ses « sources » (méthode `sources`). */
+  COLLECT_SOURCES: 'collect.sources',
+  /** Chercher une série par son titre dans l'une de ces sources (méthode `search`). Exige `collect.sources`. */
+  COLLECT_SEARCH: 'collect.search',
+  /** Ajouter ou suivre un résultat de recherche (méthode `add`). Exige `collect.search`. */
+  COLLECT_ADD: 'collect.add',
 });
 
 /**

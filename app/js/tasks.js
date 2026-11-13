@@ -121,7 +121,77 @@ export function cancelled(known, id, now = Date.now()) {
 
 /** Garde toutes les tâches actives et les `keep` dernières terminées. Les plus récentes d'abord. */
 function prune(tasks, keep) {
-  const active = tasks.filter(isActive).sort((a, b) => (b.state === STATE.RUNNING) - (a.state === STATE.RUNNING) || a.createdAt - b.createdAt);
-  const finished = tasks.filter(isFinished).sort((a, b) => b.finishedAt - a.finishedAt).slice(0, keep);
+  const active = tasks.filter(isActive).sort((a, b) => (b.state === STATE.RUNNING) - (a.state === STATE.RUNNING) || a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
+  const finished = tasks.filter(isFinished).sort((a, b) => b.finishedAt - a.finishedAt || (a.id < b.id ? -1 : 1)).slice(0, keep);
   return [...active, ...finished];
+}
+
+// ───────────── Historique partagé entre appareils ─────────────
+//
+// Chaque appareil garde sa liste de tâches ; les tâches TERMINÉES sont en plus
+// recopiées sur les serveurs (document unique, voir api.js). Les tâches
+// actives ne sont pas partagées : chaque appareil les reçoit du collecteur
+// lui-même, et une tâche active recopiée serait périmée au prochain rapport.
+//
+// État fusionné : { tasks: [...], cleared: { idTâche: finishedAt } }.
+//
+// « Effacer l'historique » laisse, pour chaque tâche effacée, une pierre
+// tombale `cleared[id] = finishedAt` (et non une date d'effacement : elle
+// ne dépend pas de l'horloge de l'appareil qui efface). Une tâche terminée
+// est masquée tant que cleared[id] >= son finishedAt ; une nouvelle demande
+// (relance) se termine plus tard et réapparaît donc. Les pierres sont bornées.
+//
+// Choix d'une version par identifiant : chaque version a une date (finishedAt
+// pour une tâche terminée, createdAt pour une active) ; la plus récente
+// l'emporte, et à date égale la terminée l'emporte sur l'active. Ainsi une
+// terminée bat une active plus ancienne (rapport tardif), mais une active créée
+// après la fin est une nouvelle demande et l'emporte. Les égalités restantes
+// sont départagées par un ordre fixe : le résultat ne dépend pas de l'ordre
+// des arguments, et fusionner deux fois donne la même chose.
+
+const when = (task) => (isFinished(task) ? task.finishedAt : task.createdAt) || 0;
+const text2 = (v) => (v === null || v === undefined ? '' : String(v));
+function compareVersion(x, y) {
+  return when(x) - when(y)
+    || isFinished(x) - isFinished(y)
+    || (x.attempts || 0) - (y.attempts || 0)
+    || (text2(x.state) === text2(y.state) ? 0 : text2(x.state) > text2(y.state) ? 1 : -1)
+    || (JSON.stringify(x) === JSON.stringify(y) ? 0 : JSON.stringify(x) > JSON.stringify(y) ? 1 : -1);
+}
+const valid = (task) => task && typeof task.id === 'string' && task.id && STATES.has(task.state);
+
+/**
+ * Fusionne deux états. Chaque argument est soit l'ancien format (un simple
+ * tableau de tâches, sans pierres tombales), soit { tasks, cleared }.
+ * `keep` tâches terminées au plus, `keepCleared` pierres tombales au plus.
+ */
+export function mergeTasks(a, b, { keep = 60, keepCleared = 200 } = {}) {
+  const parts = [a, b].map((x) => (Array.isArray(x) ? { tasks: x, cleared: {} } : x || {}));
+  const cleared = {};
+  for (const p of parts) {
+    for (const [id, at] of Object.entries(p.cleared && typeof p.cleared === 'object' ? p.cleared : {})) {
+      if (Number.isFinite(at) && at > (cleared[id] ?? -1)) cleared[id] = at;
+    }
+  }
+  const byId = new Map();
+  for (const p of parts) {
+    for (const task of Array.isArray(p.tasks) ? p.tasks : []) {
+      if (valid(task) && (!byId.has(task.id) || compareVersion(task, byId.get(task.id)) > 0)) byId.set(task.id, task);
+    }
+  }
+  const visible = [...byId.values()].filter((task) => !(isFinished(task) && cleared[task.id] >= (task.finishedAt || 0)));
+  const tombstones = Object.entries(cleared).sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, keepCleared);
+  return { tasks: prune(visible, keep), cleared: Object.fromEntries(tombstones) };
+}
+
+/**
+ * Ce qui est recopié sur les serveurs : les tâches terminées seulement, dans
+ * un ordre fixe (le même document sur tous les appareils, donc pas d'écriture
+ * inutile quand rien n'a changé).
+ */
+export function sharedView(state, opts) {
+  const m = mergeTasks(state, null, opts);
+  const tasks = m.tasks.filter(isFinished).sort((x, y) => y.finishedAt - x.finishedAt || (x.id < y.id ? -1 : 1));
+  const cleared = Object.fromEntries(Object.entries(m.cleared).sort((x, y) => (x[0] < y[0] ? -1 : 1)));
+  return { v: 1, tasks, cleared };
 }

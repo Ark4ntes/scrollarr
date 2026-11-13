@@ -31,6 +31,7 @@ for (const op of READ_ONLY) {
     if (op === 'About') detail = `${data.aboutServer.name} ${data.aboutServer.version}`;
     if (op === 'Library') { library = data.mangas.nodes; detail = `${library.length} séries dans la bibliothèque`; }
     if (op === 'Categories') detail = `${data.categories.nodes.length} catégories`;
+    if (op === 'Sources') detail = `${data.sources.nodes.length} sources installées (aucune n'a été contactée)`;
     if (data.chapters) detail = `${data.chapters.nodes.length} chapitres renvoyés`;
     report(true, op, detail);
   } catch (e) {
@@ -64,5 +65,5 @@ if (library.length) {
 }
 
 console.log(failed ? `\n${failed} requête(s) refusée(s) : copiez ce résultat dans un ticket.` : '\nToutes les requêtes en lecture sont acceptées par ce serveur.');
-console.log('Non vérifié ici (elles modifient le serveur) : ouverture des pages, progression, téléchargement, connexion.');
+console.log('Non vérifié ici (elles modifient le serveur ou contactent des sites tiers) : recherche dans une source, ajout à la bibliothèque, ouverture des pages, progression, téléchargement, connexion.');
 process.exit(failed ? 1 : 0);

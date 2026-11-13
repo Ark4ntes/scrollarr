@@ -30,6 +30,13 @@ else
 fi
 echo "yaml: $(echo "$workflows" | wc -l) workflow file(s)"
 
+# deploy/docker-compose.yml is generated from docker-compose.yml: it must be up to date
+if bash dev/make-deploy-compose.sh && git diff --quiet -- deploy/docker-compose.yml 2>/dev/null; then
+  echo "deploy compose: up to date"
+else
+  echo "DEPLOY ERROR: deploy/docker-compose.yml differs from what dev/make-deploy-compose.sh produces; run it and commit"; fail=1
+fi
+
 # GraphQL queries (graphql is installed in tests/graphql only, not at the repo root)
 npm install --prefix tests/graphql --no-audit --no-fund --silent
 node tests/graphql/parse-queries.mjs || fail=1

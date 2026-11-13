@@ -28,6 +28,7 @@ Independent project, not affiliated with Suwayomi, Komga or any commercial readi
 - **Library**: filter by library or category, genre and reading status; sort; search.
 - **Subscriptions**: follow a series and an "UP" badge flags chapters that arrived since your last visit. The list is copied to your servers so it follows you across devices.
 - **Offline**: download chapters to the device and read them without a connection.
+- **Add from the sources** (with Suwayomi): from the Search screen, an explicit "Search the sources" action looks the title up in your Suwayomi's sources and adds it to the library; its page then offers the usual download menu. Nothing is sent to a source until you ask.
 - **Push notifications** (optional service) when a chapter arrives in a series you follow.
 - Light and dark themes, English and French interface.
 
@@ -82,11 +83,11 @@ The app is plain JavaScript in ES modules with no build step: what is in `app/` 
 
 Requirements: Docker, at least one running server (Suwayomi or Komga), and an **HTTPS** address for Scrollarr. Over plain HTTP the app still reads, but browsers disable installation to the home screen, offline downloads and notifications.
 
-Scrollarr is published as a ready-to-run image, so you do not need to clone the repository. Images (`ghcr.io/ark4ntes/scrollarr` and `ghcr.io/ark4ntes/scrollarr-notifier`, for `amd64` and `arm64`) are published when a version tag is pushed. Until the first release, build from a clone instead (see the alternative below).
+Scrollarr is published as ready-to-run images, so you do not need to clone the repository. The three images (`ghcr.io/ark4ntes/scrollarr`, `scrollarr-notifier` and `scrollarr-folders`, for `amd64` and `arm64`) share one version number and are published with every release. If the repository lists no release yet, build the images from a clone instead (see the alternative below).
 
 1. Create a folder on your machine, for example `/volume1/docker/scrollarr`, and download the two files you need into it:
    ```sh
-   curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/docker-compose.yml
+   curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/deploy/docker-compose.yml
    curl -o .env https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/.env.example
    ```
    Edit `.env`: set `SUWAYOMI_URL` and/or `KOMGA_URL` to the address of each server as seen from the container (for example `http://192.168.1.10:4567`). Leave empty the one you do not use. To read plain folders instead, see *Folders service* below (`FOLDERS_URL`).
@@ -97,6 +98,16 @@ Scrollarr is published as a ready-to-run image, so you do not need to clone the 
    The app answers on port `8380` (change it with `SCROLLARR_PORT`). After editing `.env`, recreate the container with `docker compose up -d --force-recreate`.
 3. Publish it over HTTPS with your reverse proxy. On a Synology NAS: *Control Panel > Login Portal > Advanced > Reverse Proxy*, source `https://scrollarr.example.com:443`, destination `http://localhost:8380`, then assign the certificate under *Security > Certificate*.
 4. Open the address. If a server requires authentication, Scrollarr shows its sign-in form; otherwise you land directly on the home screen.
+
+### Updating
+
+```sh
+docker compose pull && docker compose up -d
+```
+
+then reload the app twice in the browser (or accept the update prompt): each device keeps the previous version cached until then. Add `--profile push` or `--profile folders` to both commands if you use those services. The installed version is shown under *Settings > About*.
+
+To pin a version or go back to the previous one, put its number in `.env` (`SCROLLARR_VERSION=0.9.0`, or `0.9` to receive only that series' fixes) and run `docker compose up -d` again. Your settings live in `.env` and the optional services' data in `./data`: an update does not touch them.
 
 **Alternative: from a clone.** Copy the repository, then `cp .env.example .env`, fill it in as above and run `docker compose up -d --build`: the images are built locally instead of being pulled.
 
@@ -121,6 +132,23 @@ node dev/check-suwayomi.mjs http://192.168.1.10:4567
 ```
 
 The script replays Scrollarr's read queries against your server and reports any it rejects. It changes nothing.
+
+### Searching and adding from Suwayomi's sources
+
+On the Search screen, below the library results, **Search the sources of Suwayomi** asks Suwayomi to search the title in the sources (extensions) you picked, up to three at a time. Results are grouped by source with their cover and language; "Add" puts the series in your Suwayomi library, fetches its chapter list and opens its page, where the download menu ("Download the whole series by Suwayomi") applies. A title already in the library opens its page instead. A source that fails or is slow shows its own error without stopping the others. Which sources are searched is chosen from the same screen ("Choose sources") and remembered on the device; by default, sources in the interface language or multilingual ones, and never those Suwayomi flags 18+ (tick them yourself). The action is hidden when no collector can search (Komga, Folders) and replaced by an explanation when the server cannot be reached; nothing is queued.
+
+Things to know: a search makes Suwayomi query third-party sites, so it can be slow or fail, and Suwayomi stores every result in its database (outside the library) as it does for its own interface. A series just added may show its author, summary and genres only once Suwayomi's own updater has initialised it (adding queues it there).
+
+The operations used, checked against the sources of Suwayomi-Server (see `app/js/connectors/suwayomi-queries.js`), identical from v2.0.1727 to v2.4.2366 and to the development branch:
+
+| Purpose | Operation |
+| --- | --- |
+| Installed sources (id, name, language, icon, 18+ flag) | `query { sources { nodes { id name lang iconUrl isNsfw } } }` (read only, no source is contacted) |
+| Search one source, first page | `mutation { fetchSourceManga(input: { source: LongString!, type: SEARCH, page: 1, query }) { hasNextPage mangas { id title thumbnailUrl inLibrary } } }` |
+| Add to the library | `mutation { updateManga(input: { id, patch: { inLibrary: true } }) { manga { id inLibrary } } }` |
+| Fetch the chapter list from the source | `mutation { fetchChapters(input: { mangaId }) { chapters { id } } }` |
+
+`dev/check-suwayomi.mjs` replays the read-only one; search and add are not replayed because they contact third-party sites and write to the server. Not yet tried against a real Suwayomi.
 
 ### Security
 
@@ -272,17 +300,28 @@ A collector fetches chapters; it does not have to list a library or serve pages.
 | Member | Role |
 | --- | --- |
 | `id`, `label` | Identifier and displayed name |
-| `capabilities` | From the collector list in `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`) |
+| `capabilities` | From the collector list in `contract.js` (`collect.chapters`, `collect.tasks`, `collect.cancel`, `collect.retry`, `collect.sources`, `collect.search`, `collect.add`) |
 | `serves` | Readers whose chapter identifiers it understands (`['suwayomi']`); empty if it shares identifiers with none |
 | `session` | Name of the reader whose session it reuses. Without it, the collector has its own server and provides `session()`, `login()`, `logout()` |
 | `collectChapters(readerId, chapterIds)` | With `collect.chapters`: fetch chapters designated by that reader's identifiers |
 | `tasks()`, `resolveTasks(nativeIds)` | With `collect.tasks`: what the collector is doing now, and what became of tasks it no longer lists |
 | `cancelTask(nativeId)` | With `collect.cancel` |
 | `retryTask(nativeId)` | With `collect.retry`: restart a failed or cancelled task |
+| `sources()` | With `collect.sources`: where it can search, as `[{ id, label, language, nsfw, icon }]` |
+| `search(sourceId, query)` | With `collect.search` (needs `collect.sources`): search one source by title, returns `{ results, more }` |
+| `add(resultId)` | With `collect.add` (needs `collect.search`): add or follow a result, returns `{ reader, seriesId, complete }` |
 
-Tasks from every collector are brought to one shape by `app/js/tasks.js`: identifier, collector, series and chapter, state (`queued`, `running`, `done`, `failed`, `cancelled`), progress, creation, start and end dates, error, attempts, and whether it can be cancelled. The app keeps what a collector forgets (dates, finished tasks). Settings only show a summary (collectors, number of active downloads); the detail is on a secondary screen opened from there, with running downloads, the queue, errors and history, and the cancel and retry actions each collector supports. Collection never gets a tab of its own: it stays in the background until you go and look at it. This history is kept per device, and dates the collector does not provide are the moment the app noticed the change.
+Tasks from every collector are brought to one shape by `app/js/tasks.js`: identifier, collector, series and chapter, state (`queued`, `running`, `done`, `failed`, `cancelled`), progress, creation, start and end dates, error, attempts, and whether it can be cancelled. The app keeps what a collector forgets (dates, finished tasks). Settings only show a summary (collectors, number of active downloads); the detail is on a secondary screen opened from there, with running downloads, the queue, errors and history, and the cancel and retry actions each collector supports. Collection never gets a tab of its own: it stays in the background until you go and look at it. The history of finished tasks is shared between devices: one document for the whole installation (not per profile) in the servers' key-value store, merged by task id (a finished task beats the same task still active elsewhere unless that one is a new request; "Clear history" leaves markers the other devices respect). Running tasks are not shared: each device gets them from the collector. Without a server that offers this store, the history stays per device. Dates the collector does not provide are the moment the app noticed the change.
 
-Register it under `COLLECTORS` in `app/js/connectors/index.js`. There is no way yet to start a collection from a title: a collector that works from a title search rather than a reader's identifiers (Tranga, for instance) will need a new capability, and screens to go with it.
+A collector can also start from a title instead of a chapter a reader already shows, with the three search capabilities, each needing the one before. The shapes are documented at the top of `collector-contract.js`, and `normalizeSource`, `normalizeResult`, `normalizeSearch` and `normalizeAdded` there check them:
+
+- A **source** is `{ id, label, language, nsfw, icon }`. `nsfw` is the server's own flag; the app does not search such sources unless the user picks them.
+- A **result** is `{ id, title, cover, sourceId, sourceLabel, language, inLibrary, reader, seriesId }`. `id` is native to the collector and opaque to the app, which hands it back to `add()`. `cover` and a source `icon` are same-origin paths (through the proxy), never external URLs: the content security policy allows no external image. `inLibrary` says the collector already holds it. `reader` and `seriesId` name the matching series of a reader the collector serves, both or neither, and only when `inLibrary`.
+- `add()` returns `{ reader, seriesId, complete }`: the series that now exists in the reader, and `complete: false` if it was added but its chapter list could not be fetched yet.
+- A collector that shares no identifiers with any reader (Tranga, Mangarr) declares an empty `serves` and returns `reader: null, seriesId: null` everywhere Suwayomi returns a reader series. It may still say `inLibrary: true` ("already followed"), but the series only exists in a reader once its files are collected and scanned, and nobody knows which one it will be before. The app then offers no link.
+- A search hits third-party sites: the app only runs one on an explicit user action, one source at a time with bounded parallelism, and a failing source never fails the others. `search()` throws for that source alone.
+
+Register it under `COLLECTORS` in `app/js/connectors/index.js`.
 
 ## Project status and known limits
 
@@ -290,6 +329,7 @@ Register it under `COLLECTORS` in `app/js/connectors/index.js`. There is no way 
 - **On real servers**: used by its author with Suwayomi-Server 2.3 and Komga (reading, progress, profiles). Not yet tried on Safari iOS. `dev/check-suwayomi.mjs` lets you check compatibility with your Suwayomi version.
 - Actually delivering notifications (beyond subscribing and detecting new chapters) has not been exercised.
 - A Suwayomi chapter that is not downloaded is fetched from the source when opened: the first display can take several seconds and depends on the extension working.
+- Searching the sources of Suwayomi and adding a series (COL-001/COL-002) is covered by tests against the mock server only: it has not been tried on a real Suwayomi, and only the first page of results of each source is shown. There is no following or automatic download of new chapters yet.
 - Duplicates across servers are matched by title only.
 - Devices sharing a secondary profile are merged entry by entry (chapter progress, history, subscriptions). Each entry carries a revision number and the identifier of the device that wrote it, so the result does not depend on device clocks. When two devices change the same entry without having seen each other, one of the two is kept — the same one on every device — but nothing can tell which was really the latest.
 - Subscriptions of the main profile are merged the same way; its reading progress is the server's own and follows the server's rules.
@@ -304,7 +344,6 @@ The full roadmap and its current status live in [docs/ROADMAP.md](docs/ROADMAP.m
 
 - Connectors for other servers (Kavita…).
 - iOS and Android apps by wrapping this code with [Capacitor](https://capacitorjs.com); same-origin sessions will then have to become tokens, with images loaded through `fetch`.
-- Browsing Suwayomi's sources and adding a manga to the library from Scrollarr.
 - Double-page mode on tablets in landscape.
 
 ## License
