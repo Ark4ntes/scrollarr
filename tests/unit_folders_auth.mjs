@@ -5,7 +5,7 @@ import { suite, fixture, env, passwordEnv, boot, get, post, request, CREDENTIALS
 
 const { test, run } = suite('folders auth');
 const cookieOf = (res) => (res.headers['set-cookie'] || [])[0]?.split(';')[0] || '';
-const PROTECTED = ['/api/v1/libraries', '/api/v1/series', '/api/v1/series/0123456789abcdef', '/api/v1/series/0123456789abcdef/books',
+const PROTECTED = ['/api/v1/libraries', '/api/v1/status', '/api/v1/series', '/api/v1/series/0123456789abcdef', '/api/v1/series/0123456789abcdef/books',
   '/api/v1/books/0123456789abcdef.0123456789abcdef', '/api/v1/books/0123456789abcdef.0123456789abcdef/next', '/api/v1/scan', '/nimporte/quoi'];
 
 async function withPassword(fn, overrides = {}) {
@@ -21,8 +21,7 @@ test('password mode: everything except /health is refused without a session', ()
   assert.equal((await get(app, '/api/v1/session')).status, 401);
   const health = await get(app, '/health');
   assert.equal(health.status, 200);
-  assert.equal(health.json.auth, 'password');
-  assert.equal(health.json.ok, true);
+  assert.deepEqual(health.json, { ok: true });
 }));
 test('login: wrong credentials are refused, right ones open a session with a hardened cookie', () => withPassword(async (app) => {
   assert.equal((await post(app, '/api/v1/login', { username: 'lecteur', password: 'faux' })).status, 401);
@@ -92,11 +91,11 @@ test('changing the credentials closes existing sessions', async () => {
   try { assert.equal((await get(third, '/api/v1/libraries', { Cookie: cookie })).status, 401); } finally { await third.close(); }
 });
 
-test('none mode: open access, login refused, logout harmless, /health says so', async () => {
+test('none mode: open access, login refused, logout harmless, /status says so', async () => {
   const app = await boot(env({}, fixture()));
   try {
     assert.equal((await get(app, '/api/v1/libraries')).status, 200);
-    assert.equal((await get(app, '/health')).json.auth, 'none');
+    assert.equal((await get(app, '/api/v1/status')).json.auth, 'none');
     assert.deepEqual((await get(app, '/api/v1/session')).json, { authenticated: true, user: null, auth: 'none' });
     assert.equal((await post(app, '/api/v1/login', CREDENTIALS)).status, 400);
     const out = await post(app, '/api/v1/logout');

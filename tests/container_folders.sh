@@ -37,8 +37,17 @@ docker run -d --name "$name" --user "$(id -u):$(id -g)" --read-only --cap-drop A
 inside() { docker exec "$name" node -e "$1"; }
 for _ in $(seq 1 30); do inside "fetch('http://127.0.0.1:8788/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" 2>/dev/null && break; sleep 1; done
 
-health() { inside "fetch('http://127.0.0.1:8788/health').then(r=>r.json()).then(j=>process.exit(j.ok&&j.auth==='password'&&j.libraries[0].name==='Scans'&&j.libraries[0].state==='ok'?0:1))"; }
-check "/health answers, password mode, library ok" health
+health() { inside "fetch('http://127.0.0.1:8788/health').then(r=>r.json()).then(j=>process.exit(JSON.stringify(j)==='{\"ok\":true}'?0:1))"; }
+check "/health answers only ok" health
+status() { docker exec "$name" node --input-type=module -e "
+const base = 'http://127.0.0.1:8788', h = { 'Content-Type': 'application/json', 'X-Requested-With': 'check' };
+const anon = await fetch(base + '/api/v1/status');
+const login = await fetch(base + '/api/v1/login', { method: 'POST', headers: h, body: JSON.stringify({ username: 'essai', password: 'mot-de-passe-d-essai' }) });
+const res = await fetch(base + '/api/v1/status', { headers: { Cookie: login.headers.get('set-cookie').split(';')[0] } });
+const j = await res.json();
+process.exit(anon.status === 401 && j.auth === 'password' && j.libraries[0].name === 'Scans' && j.libraries[0].state === 'ok' ? 0 : 1);
+"; }
+check "/api/v1/status needs a session, shows password mode and library ok" status
 unauth() { inside "fetch('http://127.0.0.1:8788/api/v1/libraries').then(r=>process.exit(r.status===401?0:1))"; }
 check "/api/v1/libraries refused without a session" unauth
 

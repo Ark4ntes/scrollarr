@@ -48,7 +48,7 @@ Trouvez le symptôme, lisez la cause, appliquez la solution. Les tableaux vienne
 | *Dossiers* est *Injoignable* | Le service n'est pas démarré (profil absent de la commande), ou il a refusé de démarrer. | `docker compose --profile folders up -d`, puis `docker logs scrollarr-folders`. Une ligne `Configuration invalide : ...` nomme le problème (`FOLDERS_AUTH` absent, mot de passe de moins de 12 caractères...). |
 | La bibliothèque montre zéro série | `FOLDERS_SCANS_PATH` pointe vers le mauvais dossier, ou l'utilisateur du service ne peut pas le lire. | `docker exec scrollarr-folders ls /libraries/Scans` doit lister vos séries. Sinon corrigez le chemin ou les permissions ([Synology](synology.md#7-le-service-dossiers-sur-un-nas)). |
 | Quelques « séries » avec des centaines de chapitres | `FOLDERS_SCANS_PATH` est un niveau trop haut. | Faites-le pointer vers le dossier qui contient directement les séries ([arborescence](installation.md#arborescence-attendue)). |
-| La bibliothèque est « indisponible » (`/folders/health` montre `"state":"unavailable"`) | Le dossier ne peut pas être lu, ou il est vide alors qu'il a contenu des séries : partage non monté, dossier chiffré verrouillé. Le service répond 503 pour que vos abonnements et téléchargements soient conservés. | Montez ou déverrouillez le partage. Si vous l'avez vidé volontairement, un parcours doit être demandé (voir `folders/README.md`). |
+| La bibliothèque est « indisponible » (`/folders/api/v1/status` montre `"state":"unavailable"`) | Le dossier ne peut pas être lu, ou il est vide alors qu'il a contenu des séries : partage non monté, dossier chiffré verrouillé. Le service répond 503 pour que vos abonnements et téléchargements soient conservés. | Montez ou déverrouillez le partage. Si vous l'avez vidé volontairement, un parcours doit être demandé (voir `folders/README.md`). |
 | Les nouveaux fichiers n'apparaissent pas | Les listes sont relues au plus toutes les 60 secondes (séries) et 30 secondes (chapitres). Un parcours complet tourne en arrière-plan toutes les 15 minutes quand quelqu'un ouvre la bibliothèque. | Attendez une minute, rouvrez la série. |
 | Un chapitre renommé a perdu sa progression | Un renommage crée un nouvel élément. | Attendu. Remettez l'ancien nom pour retrouver la progression (elle est conservée). |
 | Pages dans le mauvais ordre | L'ordre est le tri naturel des noms. | Renommez les fichiers ou les dossiers. |
@@ -101,7 +101,7 @@ Ajoutez `-f` pour les suivre en direct. L'équivalent avec Compose est `docker c
 curl http://192.168.1.10:8380/js/config.js
 ```
 
-imprime une ligne `export const APP_VERSION = '0.9.0';`. (Pas depuis la barre d'adresse du navigateur : l'application répondrait à la place du fichier.) Ne vous fiez pas au champ `version` de `http://192.168.1.10:8380/folders/health` : c'est le numéro propre du service Dossiers, pas celui de la version.
+imprime une ligne `export const APP_VERSION = '0.9.0';`. (Pas depuis la barre d'adresse du navigateur : l'application répondrait à la place du fichier.) Le numéro propre du service Dossiers (`version` dans `/folders/api/v1/status`) n'est pas celui de la version.
 
 **Les services répondent.**
 
@@ -111,7 +111,7 @@ curl http://192.168.1.10:8380/notify/health
 curl http://192.168.1.10:8380/folders/health
 ```
 
-Le premier montre quels serveurs sont configurés, sous la forme `{"komga":false,"suwayomi":true,"folders":false}`. Le deuxième répond `{"ok":true,"subscriptions":0}` quand le notifier tourne (un 404 veut dire qu'il ne tourne pas). Le troisième montre le service Dossiers, son mode et l'état de chaque bibliothèque (`ok`, `scanning` ou `unavailable`).
+Le premier montre quels serveurs sont configurés, sous la forme `{"komga":false,"suwayomi":true,"folders":false}`. Le deuxième répond `{"ok":true,"subscriptions":0}` quand le notifier tourne (un 404 veut dire qu'il ne tourne pas). Le troisième répond `{"ok":true}` quand le service Dossiers tourne, et rien d'autre : c'est la sonde de santé publique. Pour voir sa version, son mode et l'état de chaque bibliothèque (`ok`, `scanning` ou `unavailable`), ouvrez `http://192.168.1.10:8380/folders/api/v1/status` dans le navigateur où vous êtes connecté à l'application (en mode `password`, le cookie de connexion est nécessaire).
 
 **Vérifier les adresses utilisées par le conteneur.**
 
