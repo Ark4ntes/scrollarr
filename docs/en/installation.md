@@ -40,7 +40,7 @@ browser ──► Scrollarr (port 8380) ──► Suwayomi, Komga, folders servi
 
 ## Which images exist
 
-The project is not released yet (version 0.9.0 in the code, no release published). What the repository's Docker workflow (`.github/workflows/docker.yml`) is set up to publish:
+The first published version is 0.9.0. The repository's Docker workflow (`.github/workflows/docker.yml`) publishes:
 
 | Event | Image tags |
 | --- | --- |
@@ -48,9 +48,9 @@ The project is not released yet (version 0.9.0 in the code, no release published
 | A push to the `main` branch | `edge` (development build, follows `main`) |
 | A pull request | built to check it, not published |
 
-The three images are `ghcr.io/ark4ntes/scrollarr`, `ghcr.io/ark4ntes/scrollarr-notifier` and `ghcr.io/ark4ntes/scrollarr-folders`, for `amd64` and `arm64`, and they share one tag. Until a `v` tag exists there is no `latest`: build from a clone (next section but one). Once a release exists, the published images are the simpler route.
+The three images are `ghcr.io/ark4ntes/scrollarr`, `ghcr.io/ark4ntes/scrollarr-notifier` and `ghcr.io/ark4ntes/scrollarr-folders`, for `amd64` and `arm64`, and they share one tag. The published images are the simpler route; building from a clone remains possible (next section).
 
-## Install from a clone (works today)
+## Install from a clone
 
 ```sh
 git clone https://github.com/Ark4ntes/scrollarr.git
@@ -75,7 +75,7 @@ docker compose up -d --build
 
 The first build takes a few minutes. Then `docker compose ps` should list `scrollarr` as `running` (and `healthy` after about 30 seconds). Open `http://192.168.1.10:8380`, replacing the address with the machine's own.
 
-## Install from the published images (once a release exists)
+## Install from the published images
 
 No clone needed: two files are enough.
 
@@ -91,7 +91,7 @@ Edit `.env` as above, then:
 docker compose up -d
 ```
 
-`SCROLLARR_VERSION` in `.env` chooses the image tag (`latest` by default). To try the development build before the first release, set `SCROLLARR_VERSION=edge`: it follows `main` and can break between two pushes. I could not check from the repository that these images are already published.
+`SCROLLARR_VERSION` in `.env` chooses the image tag (`latest` by default). To try the development build, set `SCROLLARR_VERSION=edge`: it follows `main` and can break between two pushes.
 
 To pin a version, see [Update, backup and rollback](update-backup.md).
 

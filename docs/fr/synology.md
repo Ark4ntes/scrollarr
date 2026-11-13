@@ -37,7 +37,7 @@ sudo curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/deploy/do
 sudo curl -o .env https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/.env.example
 ```
 
-Tant qu'il n'y a pas de première version (voir [Installation](installation.md#quelles-images-existent)), construisez depuis les sources. À ma connaissance, DSM ne fournit pas `git` : téléchargez le dépôt en ZIP sur votre ordinateur, décompressez-le, puis envoyez le contenu du dossier dans `/volume1/docker/scrollarr` avec File Station. Renommez `.env.example` en `.env`. Les fichiers cachés (dont le nom commence par un point) peuvent ne pas apparaître dans File Station par défaut ; si vous ne voyez pas `.env.example`, copiez-le depuis la session SSH : `sudo cp .env.example .env`.
+Si vous préférez construire les images vous-même depuis les sources (voir [Installation](installation.md#installer-depuis-un-clone)) : à ma connaissance, DSM ne fournit pas `git` : téléchargez le dépôt en ZIP sur votre ordinateur, décompressez-le, puis envoyez le contenu du dossier dans `/volume1/docker/scrollarr` avec File Station. Renommez `.env.example` en `.env`. Les fichiers cachés (dont le nom commence par un point) peuvent ne pas apparaître dans File Station par défaut ; si vous ne voyez pas `.env.example`, copiez-le depuis la session SSH : `sudo cp .env.example .env`.
 
 Les fichiers envoyés ainsi peuvent se retrouver avec des droits restrictifs : voir « Fichiers récupérés avec des droits restrictifs » en fin de page.
 

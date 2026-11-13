@@ -44,16 +44,17 @@ Le navigateur ne parle qu'à Scrollarr. Scrollarr place chaque serveur sous sa p
 
 ## Démarrage rapide
 
-Il vous faut Docker avec Compose, un Suwayomi ou un Komga en marche, et (pour l'application complète) une adresse HTTPS, voir [Installation](docs/fr/installation.md). Le projet n'est pas encore publié : construisez depuis un clone.
+Il vous faut Docker avec Compose, un Suwayomi ou un Komga en marche, et (pour l'application complète) une adresse HTTPS, voir [Installation](docs/fr/installation.md). Deux fichiers suffisent, les images sont téléchargées :
 
 ```sh
-git clone https://github.com/Ark4ntes/scrollarr.git && cd scrollarr
-cp .env.example .env
+mkdir scrollarr && cd scrollarr
+curl -O https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/deploy/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/Ark4ntes/scrollarr/main/.env.example
 # modifiez .env : SUWAYOMI_URL=http://192.168.1.10:4567 (ou KOMGA_URL=...), l'autre vide
-docker compose up -d --build
+docker compose up -d
 ```
 
-Ouvrez `http://192.168.1.10:8380` (l'adresse de votre machine, port 8380). Vous devez voir un écran de connexion ou l'accueil. Dès qu'une version sera publiée, vous pourrez vous passer du clone et utiliser les images publiées : [Installation](docs/fr/installation.md#installer-depuis-les-images-publiées-une-fois-une-version-sortie).
+Ouvrez `http://192.168.1.10:8380` (l'adresse de votre machine, port 8380). Vous devez voir un écran de connexion ou l'accueil. Pour construire les images vous-même depuis un clone : [Installation](docs/fr/installation.md#installer-depuis-un-clone).
 
 Étapes suivantes :
 
@@ -103,7 +104,7 @@ Voir aussi : [SECURITY.md](SECURITY.md) (signaler une faille), [CONTRIBUTING.md]
 
 ## État du projet et limites connues
 
-Version 0.9.0, non publiée : aucune version n'est encore publiée. Les images sont publiées quand une étiquette `v` existe (voir [Installation](docs/fr/installation.md#quelles-images-existent)).
+Première version publiée : 0.9.0 (novembre 2026). Les versions et leurs notes sont dans les [Releases](https://github.com/Ark4ntes/scrollarr/releases) ; les images publiées sont décrites dans [Installation](docs/fr/installation.md#quelles-images-existent).
 
 - **Testé.** Des parcours complets (Suwayomi seul, Komga seul, les deux, les quatre modes d'authentification de Suwayomi, hors ligne, profils, dossiers) passent dans Chrome contre les serveurs factices de `dev/` en CI. nginx a été lancé devant ces serveurs factices. L'auteur l'utilise avec de vrais serveurs Suwayomi et Komga pour la lecture, la progression et les profils.
 - **Non essayé.** Safari sur iOS. L'envoi des notifications push (l'abonnement et la détection des nouveaux chapitres fonctionnent en test ; l'envoi lui-même n'a jamais été lancé). La recherche chez les sources et l'ajout d'une série n'ont été testés que contre le serveur factice, pas contre un vrai Suwayomi, et montrent la première page de résultats de chaque source.
