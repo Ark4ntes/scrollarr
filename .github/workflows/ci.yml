@@ -157,3 +157,12 @@ jobs:
       - name: Images built from sources with restrictive file modes
         run: tests/container_perms.sh
         if: ${{ !cancelled() }}
+      - name: Hardening - main container starts and serves the page
+        run: tests/container_hardening.sh main
+        if: ${{ !cancelled() }}
+      - name: Hardening - main container proxies a request
+        run: tests/container_hardening.sh proxy
+        if: ${{ !cancelled() }}
+      - name: Hardening - notifier starts, answers health and VAPID, writes its data volume
+        run: tests/container_hardening.sh notifier
+        if: ${{ !cancelled() }}

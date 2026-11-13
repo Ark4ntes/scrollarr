@@ -61,7 +61,19 @@ You must ask for it explicitly (`FOLDERS_AUTH=none`), and the service logs a war
 - Only images are served, recognised by their first bytes (JPEG, PNG, WebP, GIF, AVIF), never by the file name. Anything else (SVG included) is refused.
 - Archives are read in place, with limits on entries, sizes and compression ratio. Hostile or oversized archives are refused with a readable error.
 - Requests other than `GET` must carry the header `X-Requested-With` and `Content-Type: application/json`, and a request whose `Origin` does not match the host is refused. This applies on a local network too.
-- It runs with a read-only filesystem, no Linux capabilities, `no-new-privileges`, 256 MB of memory, and on an internal Docker network of its own: no port is published, only the Scrollarr container reaches it. (The main container and the notifier have no such restrictions.)
+- It runs with a read-only filesystem, no Linux capabilities, `no-new-privileges`, 256 MB of memory, and on an internal Docker network of its own: no port is published, only the Scrollarr container reaches it.
+
+## Hardening of the containers
+
+| Container | What is applied (`docker-compose.yml`) | What is not, and why |
+| --- | --- | --- |
+| `scrollarr` (nginx) | `no-new-privileges`; all Linux capabilities dropped except `CHOWN`, `SETUID`, `SETGID` and `NET_BIND_SERVICE`. | No read-only filesystem: the official image writes its configuration at start (`/etc/nginx/conf.d`) and its temporary files (`/var/cache/nginx`). It still starts as root, because nginx needs to bind port 80 and then hands its workers to the `nginx` user. No `pids_limit`. |
+| `notifier` | Runs as `node`; read-only filesystem with a `tmpfs` on `/tmp`; `no-new-privileges`; all capabilities dropped. Writes only to `/data`. | No memory or process limit. |
+| `folders` | See above: read-only filesystem, no capabilities, `no-new-privileges`, 256 MB, 64 processes, internal network. | The mounted scans are `:ro`; `/data` is writable (session key, progress). |
+
+Why these four capabilities for nginx: the master process changes the owner of its temporary directories (`CHOWN`), switches its workers to the unprivileged `nginx` user (`SETUID`, `SETGID`) and binds port 80 (`NET_BIND_SERVICE`). Nothing else is needed (`DAC_OVERRIDE` is not: the files are owned by root). This was checked by starting nginx under a reduced capability set: without any one of the four, it fails to start or to drop privileges. The official image has no documented minimal set; if a future image version asks for more, `tests/container_hardening.sh` fails in CI.
+
+`pids_limit` is set only on `folders`, and it is not enforced on a NAS whose old kernel has no PIDs cgroup; the other containers do not depend on it. `tests/container_hardening.sh` starts each container with exactly the options of `docker-compose.yml`.
 
 ## Headers sent by Scrollarr
 

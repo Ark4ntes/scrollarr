@@ -60,7 +60,7 @@ To see it in the app, start the demo server with `SERVERS=folders FOLDERS=http:/
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-`app/` and the nginx template are mounted read-only into the container, so a change shows after a reload without a rebuild (an nginx template change needs `docker compose restart scrollarr`). Remember the service worker: reload twice, or clear the site's data in the browser.
+`app/` and the nginx template are mounted read-only into the container, so a change shows after a reload without a rebuild (an nginx template change needs `docker compose restart scrollarr`). The main container runs without Linux capabilities other than four; the mounted files must therefore be readable by "others" (modes 644/755, the usual default). Remember the service worker: reload twice, or clear the site's data in the browser.
 
 ## Tests
 
@@ -90,7 +90,7 @@ Each script prints `PASS` or `FAIL` lines then `ALL PASS` or `SOME FAILED`. They
 
 ## Continuous integration
 
-- `.github/workflows/ci.yml` runs on every push and pull request, in three jobs: `syntax` (Node 22: `check_syntax.sh`, the unit tests, the nginx headers test), `e2e` (Playwright and Chromium, all end-to-end scripts, screenshots kept if something fails) and `folders` (the folders service tests and the two container tests, `tests/container_folders.sh` and `tests/container_perms.sh`).
+- `.github/workflows/ci.yml` runs on every push and pull request, in three jobs: `syntax` (Node 22: `check_syntax.sh`, the unit tests, the nginx headers test), `e2e` (Playwright and Chromium, all end-to-end scripts, screenshots kept if something fails) and `folders` (the folders service tests and the three container tests, `tests/container_folders.sh`, `tests/container_perms.sh` and `tests/container_hardening.sh`, the last one in three separate steps).
 - `.github/workflows/docker.yml` builds the three images for `amd64` and `arm64`. It publishes them to `ghcr.io/ark4ntes/` on a push to `main` (tag `edge`) and on a `v*` tag (`X.Y.Z`, `X.Y`, `latest`); pull requests only build. See [Installation](installation.md#which-images-exist).
 
 ## Project layout
