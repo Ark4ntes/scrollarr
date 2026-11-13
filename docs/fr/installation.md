@@ -40,7 +40,7 @@ navigateur ──► Scrollarr (port 8380) ──► Suwayomi, Komga, service Do
 
 ## Quelles images existent
 
-Le projet n'a pas encore de version publiée (version 0.9.0 dans le code, aucune release). Ce que le workflow Docker du dépôt (`.github/workflows/docker.yml`) est prévu pour publier :
+La première version publiée est la 0.9.0. Le workflow Docker du dépôt (`.github/workflows/docker.yml`) publie :
 
 | Événement | Étiquettes d'image |
 | --- | --- |
@@ -48,9 +48,9 @@ Le projet n'a pas encore de version publiée (version 0.9.0 dans le code, aucune
 | Un push sur la branche `main` | `edge` (version de développement, suit `main`) |
 | Une pull request | construite pour vérification, non publiée |
 
-Les trois images sont `ghcr.io/ark4ntes/scrollarr`, `ghcr.io/ark4ntes/scrollarr-notifier` et `ghcr.io/ark4ntes/scrollarr-folders`, pour `amd64` et `arm64`, avec la même étiquette. Tant qu'aucune étiquette `v` n'existe, il n'y a pas de `latest` : construisez depuis un clone (section suivante). Dès qu'une version existe, les images publiées sont la voie la plus courte.
+Les trois images sont `ghcr.io/ark4ntes/scrollarr`, `ghcr.io/ark4ntes/scrollarr-notifier` et `ghcr.io/ark4ntes/scrollarr-folders`, pour `amd64` et `arm64`, avec la même étiquette. Les images publiées sont la voie la plus courte ; construire depuis un clone reste possible (section suivante).
 
-## Installer depuis un clone (fonctionne aujourd'hui)
+## Installer depuis un clone
 
 ```sh
 git clone https://github.com/Ark4ntes/scrollarr.git
@@ -75,7 +75,7 @@ docker compose up -d --build
 
 La première construction prend quelques minutes. Ensuite, `docker compose ps` doit montrer `scrollarr` à l'état `running` (puis `healthy` au bout d'environ 30 secondes). Ouvrez `http://192.168.1.10:8380` en remplaçant l'adresse par celle de votre machine.
 
-## Installer depuis les images publiées (une fois une version sortie)
+## Installer depuis les images publiées
 
 Pas de clone nécessaire : deux fichiers suffisent.
 
@@ -91,7 +91,7 @@ Modifiez `.env` comme ci-dessus, puis :
 docker compose up -d
 ```
 
-`SCROLLARR_VERSION` dans `.env` choisit l'étiquette des images (`latest` par défaut). Pour essayer la version de développement avant la première version, mettez `SCROLLARR_VERSION=edge` : elle suit `main` et peut casser d'un push à l'autre. Je n'ai pas pu vérifier depuis le dépôt que ces images sont déjà publiées.
+`SCROLLARR_VERSION` dans `.env` choisit l'étiquette des images (`latest` par défaut). Pour essayer la version de développement, mettez `SCROLLARR_VERSION=edge` : elle suit `main` et peut casser d'un push à l'autre.
 
 Pour figer une version, voir [Mise à jour, sauvegarde et retour en arrière](update-backup.md).
 
