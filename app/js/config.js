@@ -4,6 +4,6 @@ const base = new URL('.', location.href).pathname;
 
 /** Préfixe du service de notifications push (optionnel). */
 export const NOTIFY = base + 'notify';
-export const APP_VERSION = '0.8.0';
+export const APP_VERSION = '0.9.0';
 export const SOURCE_URL = 'https://github.com/Ark4ntes/scrollarr';
 export const DL_CACHE = 'scrollarr-dl-v1';

@@ -24,6 +24,8 @@ jobs:
         run: node tests/unit_contracts.mjs
       - name: Task model (unit)
         run: node tests/unit_tasks.mjs
+      - name: Search the sources and add a series (unit)
+        run: node tests/unit_collect.mjs
       - name: Facade (unit)
         run: node tests/unit_facade.mjs
       - name: Profiles (unit)
@@ -72,6 +74,9 @@ jobs:
       - name: E2E collector tasks
         if: ${{ !cancelled() }}
         run: python tests/e2e_tasks.py
+      - name: E2E search the sources and add a series
+        if: ${{ !cancelled() }}
+        run: python tests/e2e_search.py
       - name: E2E reader without progress
         if: ${{ !cancelled() }}
         run: python tests/e2e_progress.py

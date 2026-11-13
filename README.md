@@ -28,6 +28,7 @@ Independent project, not affiliated with Suwayomi, Komga or any commercial readi
 - **Library**: filter by library or category, genre and reading status; sort; search.
 - **Subscriptions**: follow a series and an "UP" badge flags chapters that arrived since your last visit. The list is copied to your servers so it follows you across devices.
 - **Offline**: download chapters to the device and read them without a connection.
+- **Add from the sources** (with Suwayomi): from the Search screen, an explicit "Search the sources" action looks the title up in your Suwayomi's sources and adds it to the library; its page then offers the usual download menu. Nothing is sent to a source until you ask.
 - **Push notifications** (optional service) when a chapter arrives in a series you follow.
 - Light and dark themes, English and French interface.
 
@@ -121,6 +122,23 @@ node dev/check-suwayomi.mjs http://192.168.1.10:4567
 ```
 
 The script replays Scrollarr's read queries against your server and reports any it rejects. It changes nothing.
+
+### Searching and adding from Suwayomi's sources
+
+On the Search screen, below the library results, **Search the sources of Suwayomi** asks Suwayomi to search the title in the sources (extensions) you picked, up to three at a time. Results are grouped by source with their cover and language; "Add" puts the series in your Suwayomi library, fetches its chapter list and opens its page, where the download menu ("Download the whole series by Suwayomi") applies. A title already in the library opens its page instead. A source that fails or is slow shows its own error without stopping the others. Which sources are searched is chosen from the same screen ("Choose sources") and remembered on the device; by default, sources in the interface language or multilingual ones, and never those Suwayomi flags 18+ (tick them yourself). The action is hidden when no collector can search (Komga, Folders) and replaced by an explanation when the server cannot be reached; nothing is queued.
+
+Things to know: a search makes Suwayomi query third-party sites, so it can be slow or fail, and Suwayomi stores every result in its database (outside the library) as it does for its own interface. A series just added may show its author, summary and genres only once Suwayomi's own updater has initialised it (adding queues it there).
+
+The operations used, checked against the sources of Suwayomi-Server (see `app/js/connectors/suwayomi-queries.js`), identical from v2.0.1727 to v2.4.2366 and to the development branch:
+
+| Purpose | Operation |
+| --- | --- |
+| Installed sources (id, name, language, icon, 18+ flag) | `query { sources { nodes { id name lang iconUrl isNsfw } } }` (read only, no source is contacted) |
+| Search one source, first page | `mutation { fetchSourceManga(input: { source: LongString!, type: SEARCH, page: 1, query }) { hasNextPage mangas { id title thumbnailUrl inLibrary } } }` |
+| Add to the library | `mutation { updateManga(input: { id, patch: { inLibrary: true } }) { manga { id inLibrary } } }` |
+| Fetch the chapter list from the source | `mutation { fetchChapters(input: { mangaId }) { chapters { id } } }` |
+
+`dev/check-suwayomi.mjs` replays the read-only one; search and add are not replayed because they contact third-party sites and write to the server. Not yet tried against a real Suwayomi.
 
 ### Security
 
@@ -301,6 +319,7 @@ Register it under `COLLECTORS` in `app/js/connectors/index.js`.
 - **On real servers**: used by its author with Suwayomi-Server 2.3 and Komga (reading, progress, profiles). Not yet tried on Safari iOS. `dev/check-suwayomi.mjs` lets you check compatibility with your Suwayomi version.
 - Actually delivering notifications (beyond subscribing and detecting new chapters) has not been exercised.
 - A Suwayomi chapter that is not downloaded is fetched from the source when opened: the first display can take several seconds and depends on the extension working.
+- Searching the sources of Suwayomi and adding a series (COL-001/COL-002) is covered by tests against the mock server only: it has not been tried on a real Suwayomi, and only the first page of results of each source is shown. There is no following or automatic download of new chapters yet.
 - Duplicates across servers are matched by title only.
 - Devices sharing a secondary profile are merged entry by entry (chapter progress, history, subscriptions). Each entry carries a revision number and the identifier of the device that wrote it, so the result does not depend on device clocks. When two devices change the same entry without having seen each other, one of the two is kept — the same one on every device — but nothing can tell which was really the latest.
 - Subscriptions of the main profile are merged the same way; its reading progress is the server's own and follows the server's rules.
@@ -315,7 +334,6 @@ The full roadmap and its current status live in [docs/ROADMAP.md](docs/ROADMAP.m
 
 - Connectors for other servers (Kavita…).
 - iOS and Android apps by wrapping this code with [Capacitor](https://capacitorjs.com); same-origin sessions will then have to become tokens, with images loaded through `fetch`.
-- Browsing Suwayomi's sources and adding a manga to the library from Scrollarr.
 - Double-page mode on tablets in landscape.
 
 ## License

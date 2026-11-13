@@ -7,7 +7,7 @@
 import { READERS, COLLECTORS } from './connectors/index.js';
 import { CAP } from './connectors/contract.js';
 import { validateReader } from './connectors/reader-contract.js';
-import { validateCollector } from './connectors/collector-contract.js';
+import { validateCollector, normalizeSource, normalizeSearch, normalizeAdded } from './connectors/collector-contract.js';
 import * as tasksModel from './tasks.js';
 import { events, isReachable, retryNow, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
 import { idb } from './idb.js';
@@ -454,6 +454,51 @@ export async function serverDownload(bookIds) {
   if (!collector) throw new Error('Aucun collecteur pour ce serveur');
   await collector.collectChapters(c.id, bookIds.map((id) => rawId(c, id)));
   refreshTasks().catch(() => {});
+}
+
+// ───────────── Chercher chez les sources et ajouter une série ─────────────
+
+// Un collecteur qui sait chercher par titre (collect.search). Aujourd'hui un seul : on prend le premier utilisable.
+// Rien n'est envoyé aux sources sans appel explicite de l'écran : ces fonctions ne sont jamais appelées en arrière-plan.
+const searcher = () => collectors.find((k) => k.capabilities.includes(CAP.COLLECT_SEARCH) && collectorUsable(k));
+const needSearcher = () => searcher() || (() => { throw new Error('Aucun collecteur ne sait chercher'); })();
+/** Vrai si un collecteur utilisable sait chercher par titre : sinon l'écran de recherche n'en parle pas. */
+export const canSearchSources = () => !!searcher();
+/** Identifiant et nom du collecteur qui chercherait. */
+export const searchCollector = () => { const k = searcher(); return k ? { id: k.id, label: k.label } : null; };
+/** La recherche a besoin du serveur : hors ligne ou serveur injoignable, elle n'est pas proposée. */
+export const canSearchNow = () => canSearchSources() && isReachable() && navigator.onLine !== false;
+
+const sourceLists = memo(60000);
+/** Les sources du collecteur, au format du contrat. Lecture locale sur le serveur : aucune source n'est contactée. */
+export function sources() {
+  const k = needSearcher();
+  return sourceLists(k.id, async () => (await k.sources()).map((s) => normalizeSource(k, s)));
+}
+
+/** Les identifiants de série du collecteur sont ceux d'un lecteur : on y met le préfixe de la façade. */
+function tagResult(k, r) {
+  const reader = r.reader && servers.find((s) => s.c.id === r.reader)?.c;
+  return { ...r, collector: k.id, reader: reader ? r.reader : null, seriesId: reader && r.seriesId ? `${reader.code}:${r.seriesId}` : null };
+}
+/** Cherche un titre dans une source. Lève une erreur pour cette source seule. */
+export async function searchSource(sourceId, query) {
+  const k = needSearcher();
+  const res = normalizeSearch(k, await k.search(sourceId, query));
+  return { more: res.more, results: res.results.map((r) => tagResult(k, r)) };
+}
+
+/**
+ * Ajoute un résultat. La série apparaît ensuite dans la bibliothèque : les mémoires du lecteur et de la façade sont
+ * vidées. Renvoie l'identifiant de la série (préfixé), ou null si le collecteur n'a pas de série à ouvrir.
+ */
+export async function addFromSource(result) {
+  const k = collectors.find((x) => x.id === result.collector && x.capabilities.includes(CAP.COLLECT_ADD) && collectorUsable(x));
+  if (!k) throw new Error('Ajout impossible');
+  const added = normalizeAdded(k, await k.add(result.id));
+  titles.clear(); merged.clear();
+  const { seriesId } = tagResult(k, { ...added, inLibrary: true });
+  return { seriesId, complete: added.complete };
 }
 
 // ───────────── Tâches de collecte (modèle commun : tasks.js) ─────────────

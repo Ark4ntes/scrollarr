@@ -68,6 +68,19 @@ export const Q = {
   ChaptersState: 'query ChaptersState($ids: [Int!]!) { chapters(filter: { id: { in: $ids } }) { nodes { id name mangaId isDownloaded manga { id title } } } }',
   Dequeue: 'mutation Dequeue($ids: [Int!]!) { dequeueChapterDownloads(input: { ids: $ids }) { clientMutationId } }',
   Enqueue: 'mutation Enqueue($ids: [Int!]!) { enqueueChapterDownloads(input: { ids: $ids }) { clientMutationId } }',
+  // ── Ajout d'une série depuis une source ──
+  // Chaque champ et chaque mutation existent de v2.0.1727 à la version de développement (voir README, « Chercher et ajouter depuis les sources de Suwayomi »).
+  // Le scalaire Long de Suwayomi s'appelle LongString : l'identifiant d'une source voyage en texte.
+  // Le Local source (id 0) est écarté par le collecteur.
+  Sources: 'query Sources { sources { nodes { id name lang iconUrl isNsfw } } }',
+  // Une page de résultats d'une source. Suwayomi range chaque résultat dans sa base (hors bibliothèque) : leurs id sont réels.
+  SourceSearch: `mutation SourceSearch($source: LongString!, $query: String!) {
+    fetchSourceManga(input: { source: $source, type: SEARCH, page: 1, query: $query }) {
+      hasNextPage mangas { id title thumbnailUrl inLibrary }
+    }
+  }`,
+  AddToLibrary: 'mutation AddToLibrary($id: Int!) { updateManga(input: { id: $id, patch: { inLibrary: true } }) { manga { id inLibrary } } }',
+  FetchChapters: 'mutation FetchChapters($id: Int!) { fetchChapters(input: { mangaId: $id }) { chapters { id } } }',
   DeleteMeta: 'mutation DeleteMeta($key: String!) { deleteGlobalMeta(input: { key: $key }) { clientMutationId } }',
   SetMeta: 'mutation SetMeta($key: String!, $value: String!) { setGlobalMeta(input: { meta: { key: $key, value: $value } }) { meta { key } } }',
   Login: 'mutation Login($username: String!, $password: String!) { login(input: { username: $username, password: $password }) { accessToken refreshToken } }',
@@ -75,4 +88,4 @@ export const Q = {
 };
 
 /** Requêtes en lecture seule, sans risque pour un serveur réel (utilisé par le script de vérification). */
-export const READ_ONLY = ['About', 'Probe', 'Categories', 'Library', 'Latest', 'InProgress', 'RecentlyRead', 'Metas', 'Downloads'];
+export const READ_ONLY = ['About', 'Probe', 'Categories', 'Library', 'Latest', 'InProgress', 'RecentlyRead', 'Metas', 'Downloads', 'Sources'];

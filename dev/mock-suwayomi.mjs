@@ -5,7 +5,9 @@
 //   SUWA_AUTH=none|basic|simple|ui   mode d'authentification (défaut : none)
 //   SUWA_TOKEN_TTL=300               durée de vie du jeton en mode « ui », en secondes
 //   Identifiants : demo / demo
+//   SOURCE_SLOW_MS=2500              délai de la source lente (voir « Sources » plus bas)
 //   POST /suwayomi/__mock/add-chapter?manga=<id>   simule l'arrivée d'un chapitre
+//   GET  /suwayomi/__mock/requests   opérations GraphQL reçues, dans l'ordre (pour vérifier qu'aucune recherche n'est partie seule)
 
 export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody, cookie }) {
   const AUTH = process.env.SUWA_AUTH || 'none';
@@ -90,6 +92,54 @@ export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody
   }
   markRead(2, 9, 4); markRead(3, 12, 0); markRead(5, 30, 0); markRead(0, 21, 0);
 
+  // ───────────── Sources (recherche et ajout depuis Scrollarr) ─────────────
+  // Comme un vrai serveur : une recherche range ses résultats dans la base, hors bibliothèque, avec un numéro réel ;
+  // la liste des chapitres n'est récupérée qu'à la demande (FetchChapters). Les résultats sont les mêmes à chaque fois.
+  //   1001 MangaFixe    fr   répond vite, a d'autres pages de résultats
+  //   1002 ScanDemo     en
+  //   1003 SourceLente  fr   répond après SOURCE_SLOW_MS
+  //   1004 SourceCassée fr   échoue toujours (erreur GraphQL, comme une extension dont le site est tombé)
+  //   1005 AdultesDemo  fr   signalée « adulte » par le serveur
+  //   1006 Multilingue  all
+  //   0    Local source : n'est pas un site où chercher
+  const SLOW_MS = Number(process.env.SOURCE_SLOW_MS || 2500);
+  const sources = [
+    { id: '1001', name: 'MangaFixe', lang: 'fr', isNsfw: false, pkg: 'demo.mangafixe' },
+    { id: '1002', name: 'ScanDemo', lang: 'en', isNsfw: false, pkg: 'demo.scandemo' },
+    { id: '1003', name: 'SourceLente', lang: 'fr', isNsfw: false, pkg: 'demo.lente', slow: true },
+    { id: '1004', name: 'SourceCassée', lang: 'fr', isNsfw: false, pkg: 'demo.cassee', fails: true },
+    { id: '1005', name: 'AdultesDemo', lang: 'fr', isNsfw: true, pkg: 'demo.adultes' },
+    { id: '1006', name: 'Multilingue', lang: 'all', isNsfw: false, pkg: 'demo.multi' },
+    { id: '0', name: 'Local source', lang: 'localsourcelang', isNsfw: false, pkg: 'local' },
+  ];
+  // `existing` : le titre est déjà dans la bibliothèque (numéro de la série concernée).
+  const catalogue = [
+    { source: '1001', title: 'Lune d’Acier', chapters: 12, hue: 210 },
+    { source: '1001', title: 'Café Lune Rouge', existing: 2 },
+    { source: '1001', title: 'Lune de Papier', chapters: 8, hue: 40 },
+    { source: '1002', title: 'Steel Moon', chapters: 10, hue: 190 },
+    { source: '1002', title: 'Moonlit Garden', chapters: 6, hue: 120 },
+    { source: '1003', title: 'Lune Lente', chapters: 5, hue: 300 },
+    { source: '1005', title: 'Lune Interdite', chapters: 4, hue: 350 },
+    { source: '1006', title: 'Lune Polyglotte', chapters: 7, hue: 70 },
+    { source: '1006', title: 'Dojo Tanuki', existing: 6 },
+    { source: '1001', title: 'Brumes d’Automne', chapters: 9, hue: 260 },
+  ];
+  const fold = (x) => String(x).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  /** Le manga que le serveur range dans sa base quand une recherche le renvoie. */
+  function materialize(entry) {
+    if (entry.existing) return mangas.find((m) => m.id === entry.existing);
+    const id = 100 + catalogue.indexOf(entry);
+    let m = mangas.find((x) => x.id === id);
+    if (!m) {
+      m = { id, title: entry.title, author: null, artist: null, description: null, genre: [], status: 'UNKNOWN', inLibrary: false, inLibraryAt: 0,
+        categoryIds: [], tall: false, _hue: entry.hue, metadata: { title: entry.title }, _chapters: entry.chapters, _source: entry.source };
+      mangas.push(m);
+    }
+    return m;
+  }
+
   // ───────────── Sérialisation ─────────────
   const S = (n) => String(n); // le scalaire Long de Suwayomi voyage sous forme de chaîne
   const chapterDto = (c, withManga) => c && ({
@@ -156,6 +206,32 @@ export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody
     InProgress: ({ first }) => ({ chapters: { nodes: chapters.filter((c) => inLibrary(c) && !c.isRead && c.lastPageRead > 0).sort((a, b) => b.lastReadAt - a.lastReadAt).slice(0, first).map((c) => chapterDto(c, true)) } }),
     RecentlyRead: ({ first }) => ({ chapters: { nodes: chapters.filter((c) => inLibrary(c) && c.lastReadAt > 0).sort((a, b) => b.lastReadAt - a.lastReadAt).slice(0, first).map((c) => chapterDto(c, true)) } }),
     Metas: ({ prefix }) => ({ metas: { nodes: [...metas].filter(([k]) => k.startsWith(prefix)).map(([key, value]) => ({ key, value })) } }),
+    Sources: () => ({ sources: { nodes: sources.map((x) => ({ id: x.id, name: x.name, lang: x.lang, iconUrl: `/api/v1/extension/icon/${x.pkg}`, isNsfw: x.isNsfw })) } }),
+    SourceSearch: async ({ source, query }) => {
+      const src = sources.find((x) => x.id === source) || fail(`Source ${source} not found`);
+      if (src.fails) fail('Failed to connect to https://source-cassee.invalid');
+      if (src.slow) await sleep(SLOW_MS);
+      const needle = fold(query);
+      const hits = catalogue.filter((e) => e.source === source && fold(e.title).includes(needle));
+      return { fetchSourceManga: { hasNextPage: source === '1001' && hits.length > 1, mangas: hits.map((e) => {
+        const m = materialize(e);
+        return { id: m.id, title: m.title, thumbnailUrl: `/api/v1/manga/${m.id}/thumbnail`, inLibrary: m.inLibrary };
+      }) } };
+    },
+    AddToLibrary: ({ id }) => {
+      const m = mangas.find((x) => x.id === id) || fail('No manga');
+      m.inLibrary = true; m.inLibraryAt = now();
+      return { updateManga: { manga: { id: m.id, inLibrary: true } } };
+    },
+    FetchChapters: async ({ id }) => {
+      const m = mangas.find((x) => x.id === id) || fail('No manga');
+      if (m._noChapters) fail('Chapter list unavailable');
+      // Le premier appel va chercher les chapitres chez la source (aucun n'est téléchargé) ; les suivants renvoient ce qui existe.
+      if (!chapters.some((c) => c.mangaId === m.id)) {
+        for (let n = 1; n <= (m._chapters || 5); n++) addChapter(m, n, now() - ((m._chapters || 5) - n) * DAY, false);
+      }
+      return { fetchChapters: { chapters: chapters.filter((c) => c.mangaId === m.id).map((c) => ({ id: c.id })) } };
+    },
     DeleteMeta: ({ key }) => { metas.delete(key); return { deleteGlobalMeta: { clientMutationId: null } }; },
 
     Pages: ({ id }) => {
@@ -207,7 +283,9 @@ export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody
   }
 
   // ───────────── HTTP ─────────────
+  const requests = [];
   return async function handle(req, res, path, q) {
+    if (path === '/__mock/requests') return send(res, 200, requests);
     if (path === '/__mock/add-chapter' && req.method === 'POST') {
       const m = mangas.find((x) => x.id === Number(q.get('manga'))) || mangas[0];
       const n = chapters.filter((c) => c.mangaId === m.id).length + 1;
@@ -218,15 +296,17 @@ export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody
 
     if (path === '/api/graphql' && req.method === 'POST') {
       const body = await readBody(req);
+      requests.push(body.operationName);
       const op = ops[body.operationName];
       if (!op) return send(res, 200, { errors: [{ message: `Unknown operation ${body.operationName}` }] });
       if (state !== 'ok' && !OPEN.has(body.operationName)) return send(res, 200, { errors: [{ message: 'Unauthorized' }], data: null });
-      try { return send(res, 200, { data: op(body.variables || {}) }); }
+      try { return send(res, 200, { data: await op(body.variables || {}) }); }
       catch (e) { return send(res, 200, { errors: [{ message: e.message }], data: null }); }
     }
 
     if (state !== 'ok') return send(res, 401, 'Unauthorized', { 'Content-Type': 'text/plain' });
     let m;
+    if (path.startsWith('/api/v1/extension/icon/')) return svg(res, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="hsl(${path.length * 37 % 360} 60% 45%)"/></svg>`);
     if ((m = path.match(/^\/api\/v1\/manga\/(\d+)\/thumbnail$/))) {
       const manga = mangas.find((x) => x.id === Number(m[1]));
       return manga ? svg(res, coverSvg(manga)) : send(res, 404, 'Not found');
