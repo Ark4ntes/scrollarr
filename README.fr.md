@@ -104,7 +104,7 @@ Voir aussi : [SECURITY.md](SECURITY.md) (signaler une faille), [CONTRIBUTING.md]
 
 ## Versions de serveurs prises en charge
 
-Dernière revue : 13/11/2026. Une revue hebdomadaire compare chaque nouvelle version des serveurs aux appels que fait Scrollarr (voir `docs/COMPAT-WATCH.md`). « Revue » signifie que les notes de version et les sources du serveur ont été confrontées aux appels de Scrollarr ; « utilisée » signifie que l'auteur la fait tourner.
+Dernière revue : 13/11/2026. Une revue hebdomadaire compare chaque nouvelle version des serveurs aux appels que fait Scrollarr (voir [docs/COMPAT-WATCH.md](docs/COMPAT-WATCH.md)). « Revue » signifie que les notes de version et les sources du serveur ont été confrontées aux appels de Scrollarr ; « utilisée » signifie que l'auteur la fait tourner.
 
 | Serveur | Revue, aucune régression trouvée | Utilisée par l'auteur | Appels vérifiés |
 | --- | --- | --- | --- |

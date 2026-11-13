@@ -104,7 +104,7 @@ Also: [SECURITY.md](SECURITY.md) (report a vulnerability), [CONTRIBUTING.md](CON
 
 ## Supported server versions
 
-Last reviewed: 2026-11-13. A weekly review compares every new release of the servers with the API calls Scrollarr makes (see `docs/COMPAT-WATCH.md`). "Reviewed" means the release notes and the server sources were checked against Scrollarr's calls; "used" means the author runs it.
+Last reviewed: 2026-11-13. A weekly review compares every new release of the servers with the API calls Scrollarr makes (see [docs/COMPAT-WATCH.md](docs/COMPAT-WATCH.md)). "Reviewed" means the release notes and the server sources were checked against Scrollarr's calls; "used" means the author runs it.
 
 | Server | Reviewed, no regression found | Used by the author | Calls checked |
 | --- | --- | --- | --- |
