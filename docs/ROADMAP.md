@@ -5,7 +5,7 @@
 > Vision : lecteur manga/comics auto-hébergé, multi-serveurs, avec
 > collecte intégrée et applications iOS/Android.
 
-## État d'avancement (11 novembre 2026, version 0.7.0)
+## État d'avancement (11 novembre 2026, version 0.9.0)
 
 Ce document décrit une cible. Voici où en est réellement le dépôt.
 
