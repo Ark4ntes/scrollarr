@@ -102,6 +102,17 @@ D'autres serveurs (Kavita...) sont prévus, pas disponibles.
 
 Voir aussi : [SECURITY.md](SECURITY.md) (signaler une faille), [CONTRIBUTING.md](CONTRIBUTING.md), [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## Versions de serveurs prises en charge
+
+Dernière revue : 13/11/2026. Une revue hebdomadaire compare chaque nouvelle version des serveurs aux appels que fait Scrollarr (voir `docs/COMPAT-WATCH.md`). « Revue » signifie que les notes de version et les sources du serveur ont été confrontées aux appels de Scrollarr ; « utilisée » signifie que l'auteur la fait tourner.
+
+| Serveur | Revue, aucune régression trouvée | Utilisée par l'auteur | Appels vérifiés |
+| --- | --- | --- | --- |
+| Suwayomi-Server | de la v2.0.1727 à la v2.4.2366 | 2.3 | opérations GraphQL de `app/js/connectors/suwayomi-queries.js` |
+| Komga | jusqu'à la 1.29.2 | oui | points d'accès REST `/api/v1` et `/api/v2/users/me` de `app/js/connectors/readers/komga.js` |
+
+Hors de ce tableau : les versions publiées après la date ci-dessus et les préversions.
+
 ## État du projet et limites connues
 
 Première version publiée : 0.9.0 (novembre 2026). Les versions et leurs notes sont dans les [Releases](https://github.com/Ark4ntes/scrollarr/releases) ; les images publiées sont décrites dans [Installation](docs/fr/installation.md#quelles-images-existent).
