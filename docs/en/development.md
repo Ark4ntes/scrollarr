@@ -75,6 +75,7 @@ node tests/unit_sync.mjs
 node tests/unit_contracts.mjs
 node tests/unit_facade.mjs
 node tests/unit_profiles.mjs
+node tests/unit_profile_name.mjs
 ```
 
 The end-to-end tests drive a headless Chromium against the demo servers:

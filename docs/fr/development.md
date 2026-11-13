@@ -75,6 +75,7 @@ node tests/unit_sync.mjs
 node tests/unit_contracts.mjs
 node tests/unit_facade.mjs
 node tests/unit_profiles.mjs
+node tests/unit_profile_name.mjs
 ```
 
 Les tests de bout en bout pilotent un Chromium sans interface contre les serveurs de démonstration :

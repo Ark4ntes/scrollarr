@@ -36,7 +36,7 @@ Trouvez le symptôme, lisez la cause, appliquez la solution. Les tableaux vienne
 | Vous lisez avec un autre profil, mais l'interface de Suwayomi ou de Komga n'affiche rien | Seul le profil **principal** utilise l'historique de lecture du serveur. Un autre profil garde sa progression dans les propres documents de Scrollarr sur le serveur. | Attendu. Lisez avec le profil principal si vous voulez l'historique du serveur. |
 | Vous cherchez la progression d'un profil dans `data/folders/progress/` et ne trouvez rien sous `main` | Là, la progression d'un autre profil est rangée sous son **identifiant**, un code aléatoire comme `p3k9x2a`, un dossier par profil. Le service ne connaît pas les noms. | Regardez les autres dossiers ; `main` ne contient que le profil principal. |
 | Un profil ou un abonnement diffère sur un autre appareil | Le profil ouvert sur un appareil, les serveurs activés et les réglages de l'interface sont gardés **par appareil**. Les abonnements sont par profil et copiés sur chaque serveur qui les stocke (Suwayomi, Komga). Avec *Dossiers* seul, les abonnements restent sur l'appareil. | Choisissez le même profil sur les deux (*Réglages > Profil > Changer de profil*), activez les mêmes serveurs, rechargez. Deux appareils qui modifient la même entrée avant de s'être vus en gardent une des deux, la même partout. |
-| Le profil principal s'appelle « Principal » même dans l'interface anglaise | C'est le nom que lui donne l'application, en français. | Vous pouvez le renommer : *Réglages > Profil > Gérer les profils*, puis le menu à côté du profil, *Renommer*. |
+| Le profil principal s'appelle « Principal » même dans l'interface anglaise | Jusqu'à la version 0.9.0, ce nom français était enregistré et affiché tel quel. Depuis la 0.9.1, il s'affiche « Main » en anglais (le nom par défaut est traduit à l'affichage). | Mettez à jour. Un nom que vous avez choisi n'est jamais traduit. Vous pouvez le renommer : *Réglages > Profil > Gérer les profils*, puis le menu à côté du profil, *Renommer*. |
 | Un abonnement a disparu | L'application ne retire un abonnement que lorsque sa série est signalée introuvable deux fois, à au moins 24 heures d'écart (série supprimée du serveur, ou dossier renommé). | Abonnez-vous de nouveau depuis la page de la série. |
 | « Les profils ne sont pas disponibles avec ce serveur. Les abonnements restent sur cet appareil. » | Seul *Dossiers* est activé : il n'a pas de stockage clé-valeur. | Activez aussi Suwayomi ou Komga. |
 
@@ -101,7 +101,7 @@ Ajoutez `-f` pour les suivre en direct. L'équivalent avec Compose est `docker c
 curl http://192.168.1.10:8380/js/config.js
 ```
 
-imprime une ligne `export const APP_VERSION = '0.9.0';`. (Pas depuis la barre d'adresse du navigateur : l'application répondrait à la place du fichier.) Le numéro propre du service Dossiers (`version` dans `/folders/api/v1/status`) n'est pas celui de la version.
+imprime une ligne `export const APP_VERSION = '0.9.1';`. (Pas depuis la barre d'adresse du navigateur : l'application répondrait à la place du fichier.) Le numéro propre du service Dossiers (`version` dans `/folders/api/v1/status`) n'est pas celui de la version.
 
 **Les services répondent.**
 

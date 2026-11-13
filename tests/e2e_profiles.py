@@ -1,8 +1,8 @@
 from _common import *   # ROOT, server, stop, check, shot, run, GQL
 
 
-def newpage(b, errs, state=None):
-    ctx=b.new_context(viewport={'width':390,'height':844}, device_scale_factor=2, is_mobile=True, has_touch=True, locale='fr-FR', color_scheme='dark', storage_state=state)
+def newpage(b, errs, state=None, locale='fr-FR'):
+    ctx=b.new_context(viewport={'width':390,'height':844}, device_scale_factor=2, is_mobile=True, has_touch=True, locale=locale, color_scheme='dark', storage_state=state)
     pg=ctx.new_page(); pg.on('pageerror', lambda e: errs.append(str(e)))
     pg.on('console', lambda m: errs.append('console: '+m.text) if m.type=='error' and 'Failed to load resource' not in m.text else None)
     return ctx,pg
@@ -18,6 +18,15 @@ def scenario(b):
     pg.goto(B+'/'); pg.wait_for_selector('.hero'); pg.wait_for_timeout(600)
     main_hero=pg.inner_text('.hero-sub'); check('main profile resumes from server history', 'Chapitre 10' in main_hero, main_hero)
     check('no avatar while a single profile exists', pg.locator('.avatar').count()==0)
+    pg.goto(B+'/#/profiles'); pg.wait_for_selector('.who'); pg.wait_for_timeout(300)
+    check('French interface: main profile is shown as Principal', pg.inner_text('.profile-main strong')=='Principal', pg.inner_text('.profile-main strong'))
+    # même serveur, interface en anglais : le profil principal s'affiche « Main » alors que la liste enregistrée garde « Principal »
+    ectx,epg=newpage(b,errs,locale='en-US')
+    epg.goto(B+'/#/profiles'); epg.wait_for_selector('.who .profile-main'); epg.wait_for_timeout(300)
+    check('English interface: main profile is shown as Main', epg.inner_text('.profile-main strong')=='Main', epg.inner_text('.profile-main strong'))
+    check('English interface: avatar initial follows the shown name', epg.inner_text('.profile-main .avatar')=='M', epg.inner_text('.profile-main .avatar'))
+    stored=epg.evaluate("JSON.parse(localStorage.getItem('scrollarr.profiles.cache')||'[]').map(p=>p.name)")
+    check('English interface: stored name of the main profile is unchanged', stored in ([], ['Principal']), stored); ectx.close()
     pg.goto(B+'/#/more'); pg.wait_for_selector('.panel'); pg.click('text=Gérer les profils'); pg.wait_for_selector('.who'); pg.wait_for_timeout(300)
     shot(pg,'60-profiles-one.png')
     pg.click('text=Ajouter un profil'); pg.wait_for_selector('.sheet input'); pg.fill('.sheet input','Léa'); pg.click('.sheet button[type=submit]'); pg.wait_for_selector('.profile >> nth=1'); pg.wait_for_timeout(400)

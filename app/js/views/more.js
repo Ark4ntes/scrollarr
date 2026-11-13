@@ -127,7 +127,7 @@ export async function more(root) {
       : h('section.panel',
       h('h2', t('Profil')),
       h('p.note', profiles.list().length > 1
-        ? t('Profil ouvert sur cet appareil : {name}.', { name: profiles.active().name })
+        ? t('Profil ouvert sur cet appareil : {name}.', { name: profiles.displayName(profiles.active()) })
         : t('Ajoutez un profil pour qu’une autre personne ait sa propre progression et ses propres abonnements.')),
       h('a.btn', { href: '#/profiles' }, profiles.list().length > 1 ? t('Changer de profil') : t('Gérer les profils'))),
     h('section.panel',

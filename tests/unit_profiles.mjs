@@ -170,5 +170,24 @@ await test('list: offline, the known list is kept', async () => {
   goodDown = false;
 });
 
+// ───────────── Nom du profil principal (interface en français ici ; l'anglais est dans unit_profile_name.mjs) ─────────────
+await test('main name: the default name is shown in French and stays "Principal" in the stored list', async () => {
+  docsOf.good[LIST] = docsOf.good2[LIST] = JSON.stringify([MAIN, { id: 'p1', name: 'Duo' }]);
+  await profiles.load();
+  const main = profiles.list().find((p) => p.id === 'main');
+  assert.equal(main.name, 'Principal');
+  assert.equal(profiles.displayName(main), 'Principal');
+  assert.equal(profiles.displayName({ id: 'p1', name: 'Principal' }), 'Principal'); // un autre profil : jamais traduit, quel que soit son nom
+});
+await test('main name: a custom name is kept, stored, and shown as is', async () => {
+  await profiles.rename('main', '  Papa ');
+  const main = profiles.list().find((p) => p.id === 'main');
+  assert.equal(main.name, 'Papa');
+  assert.equal(profiles.displayName(main), 'Papa');
+  assert.equal(JSON.parse(docsOf.good[LIST]).find((p) => p.id === 'main').name, 'Papa');
+  await profiles.rename('main', 'Principal'); // retour au nom par défaut
+  assert.equal(profiles.displayName(profiles.list().find((p) => p.id === 'main')), 'Principal');
+});
+
 console.log(failed ? `\n${failed} test(s) failed` : '\nAll profile unit tests passed');
 process.exit(failed ? 1 : 0);

@@ -32,6 +32,8 @@ jobs:
         run: node tests/unit_facade.mjs
       - name: Profiles (unit)
         run: node tests/unit_profiles.mjs
+      - name: Main profile name in English (unit)
+        run: node tests/unit_profile_name.mjs
       - name: Subscriptions (unit)
         run: node tests/unit_store.mjs
       - name: Security headers (nginx)

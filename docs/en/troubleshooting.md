@@ -36,7 +36,7 @@ Find the symptom, read the cause, apply the fix. The tables come first; the comm
 | You read as another profile, but Suwayomi's or Komga's own interface shows nothing | Only the **main** profile uses the server's reading history. Another profile keeps its progress in Scrollarr's own documents on the server. | Expected. Read as the main profile if you want the server's history. |
 | You look for a profile's progress in `data/folders/progress/` and find nothing under `main` | There, the progress of another profile is under its **identifier**, a random code such as `p3k9x2a`, one folder per profile. The service does not know the names. | Look in the other folders; `main` holds the main profile only. |
 | A profile or subscription is different on another device | The profile open on a device, the servers switched on, and the interface settings are kept **per device**. Subscriptions are per profile and copied to every server that stores them (Suwayomi, Komga). With only *Folders*, subscriptions stay on the device. | Choose the same profile on both (*Settings > Profile > Switch profile*), switch on the same servers, reload. Two devices that change the same entry before seeing each other keep one of the two, the same on all devices. |
-| The main profile is called "Principal" in the English interface | That is the name given to it by the app, in French. | You can rename it: *Settings > Profile > Manage profiles*, then the menu next to it, *Rename*. |
+| The main profile is called "Principal" in the English interface | Version 0.9.0 and earlier stored and showed that French name. Since 0.9.1 it is shown as "Main" in English (the default name is translated when displayed). | Update. A name you chose yourself is never translated. You can rename it: *Settings > Profile > Manage profiles*, then the menu next to it, *Rename*. |
 | A subscription vanished | The app removes a subscription only when its series is reported as not found twice, at least 24 hours apart (series deleted on the server, or a folder renamed). | Subscribe again from the series page. |
 | "Profiles are not available with this server. Subscriptions stay on this device." | Only *Folders* is switched on: it has no key-value store. | Switch on Suwayomi or Komga too. |
 
@@ -101,7 +101,7 @@ Add `-f` to follow them live. The equivalent with Compose is `docker compose log
 curl http://192.168.1.10:8380/js/config.js
 ```
 
-prints a line `export const APP_VERSION = '0.9.0';`. (Not from the browser's address bar: the app would answer instead of the file.) The folders service's own number (`version` in `/folders/api/v1/status`) is not the release number.
+prints a line `export const APP_VERSION = '0.9.1';`. (Not from the browser's address bar: the app would answer instead of the file.) The folders service's own number (`version` in `/folders/api/v1/status`) is not the release number.
 
 **Services answer.**
 
