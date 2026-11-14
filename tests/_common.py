@@ -140,6 +140,10 @@ def launch(p):
     kw = {'args': ['--no-sandbox']}
     if CHROME_PATH:
         kw['executable_path'] = CHROME_PATH
+    elif os.environ.get('CHROMIUM_CHANNEL'):
+        # « chromium » = le navigateur complet en mode sans affichage, au lieu du « headless shell »
+        # par défaut, qui refuse toujours les notifications (Notification.permission === 'denied').
+        kw['channel'] = os.environ['CHROMIUM_CHANNEL']
     return p.chromium.launch(**kw)
 
 

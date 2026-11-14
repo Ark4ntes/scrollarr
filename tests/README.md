@@ -62,6 +62,7 @@ python tests/e2e_folders.py     # folders reader on the REAL folders service: no
 python tests/e2e_folders_progress.py  # folders reader on the REAL service: resume after reload, service restart (SIGTERM, SIGKILL) and network cut, mark read/unread, home lists; folders-only UI without failed requests (~2 min)
 python tests/e2e_folders_profiles.py  # folders service next to the mock Suwayomi: a secondary profile on two devices, other profiles do not see it, deletion forgets it (~2 min)
 python tests/e2e_push.py        # notifications panel with and without the notifier, enabling (permission refused / granted, stubbed push registration), favorites sent to the real notifier, test button, a chapter's PUSH payload delivered to the real service worker through the DevTools protocol, click handler, disabling (~40 s)
+                                # in CI it runs with CHROMIUM_CHANNEL=chromium: Playwright's default headless shell always refuses notifications
 python tests/e2e_tasks.py       # collector tasks: progress, failure, cancellation, history (~40 s)
 python tests/e2e_search.py      # search the sources from the Search screen: nothing sent before the action, several sources, a failing and a slow one, add, source choice, offline, Komga only (~1 min)
 python tests/e2e_tasks_retry.py   # automatic retry: a chapter failing twice ends done, exhausted after three, setting off, two devices (backoff shortened by a localStorage key) (~2 min)

@@ -96,6 +96,9 @@ jobs:
         run: python tests/e2e_tasks_retry.py
       - name: E2E push notifications (real notifier, stubbed push registration, service worker)
         if: ${{ !cancelled() }}
+        # The default headless shell always refuses notifications; the full browser does not.
+        env:
+          CHROMIUM_CHANNEL: chromium
         run: python tests/e2e_push.py
       - name: E2E reader without progress
         if: ${{ !cancelled() }}
