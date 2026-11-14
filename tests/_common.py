@@ -87,6 +87,22 @@ def folders_service(port, root, auth='none', **env):
     return p
 
 
+def notifier_service(port, suwayomi_port=None, **env):
+    """Start the real notifier (PUSH_DRY_RUN=1: each send is logged as `PUSH <user> <payload>`) on a throwaway data folder;
+    killed by cleanup() whatever happens. Returns (process, data_dir, log_path). `suwayomi_port`: the demo server it watches."""
+    data = tempfile.mkdtemp(prefix='scrollarr-notifier-')
+    _tmpdirs.append(data)
+    log = os.path.join(data, 'notifier.log')
+    e = dict(os.environ, PORT=str(port), DATA_DIR=data, POLL_MINUTES='0.05', PUSH_DRY_RUN='1')
+    if suwayomi_port:
+        e['SUWAYOMI_URL'] = f'http://127.0.0.1:{suwayomi_port}/suwayomi'
+    e.update(env)
+    p = subprocess.Popen(['node', 'notifier/server.js'], cwd=ROOT, env=e, stdout=open(log, 'w'), stderr=subprocess.STDOUT)
+    _procs.append(p)
+    _wait_port(p, port, 'notifier')
+    return p, data, log
+
+
 def cleanup():
     for p in _procs:
         if p.poll() is None:
@@ -124,6 +140,10 @@ def launch(p):
     kw = {'args': ['--no-sandbox']}
     if CHROME_PATH:
         kw['executable_path'] = CHROME_PATH
+    elif os.environ.get('CHROMIUM_CHANNEL'):
+        # « chromium » = le navigateur complet en mode sans affichage, au lieu du « headless shell »
+        # par défaut, qui refuse toujours les notifications (Notification.permission === 'denied').
+        kw['channel'] = os.environ['CHROMIUM_CHANNEL']
     return p.chromium.launch(**kw)
 
 

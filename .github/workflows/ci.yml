@@ -38,6 +38,8 @@ jobs:
         run: node tests/unit_profile_name.mjs
       - name: Subscriptions (unit)
         run: node tests/unit_store.mjs
+      - name: Service worker push handlers (unit)
+        run: node tests/unit_sw_push.mjs
       - name: Security headers (nginx)
         run: |
           command -v nginx >/dev/null || sudo apt-get install -y --no-install-recommends nginx-light
@@ -66,6 +68,9 @@ jobs:
       - name: Folders dependencies (locked; the folders e2e suites start the real service)
         run: npm ci --omit=dev --no-audit --no-fund
         working-directory: folders
+      - name: Notifier dependencies (locked; the push e2e suite starts the real service)
+        run: npm ci --omit=dev --no-audit --no-fund
+        working-directory: notifier
       - name: E2E servers
         run: python tests/e2e_servers.py
       - name: E2E profiles
@@ -89,6 +94,12 @@ jobs:
       - name: E2E automatic retry of failed downloads
         if: ${{ !cancelled() }}
         run: python tests/e2e_tasks_retry.py
+      - name: E2E push notifications (real notifier, stubbed push registration, service worker)
+        if: ${{ !cancelled() }}
+        # The default headless shell always refuses notifications; the full browser does not.
+        env:
+          CHROMIUM_CHANNEL: chromium
+        run: python tests/e2e_push.py
       - name: E2E reader without progress
         if: ${{ !cancelled() }}
         run: python tests/e2e_progress.py
@@ -157,6 +168,22 @@ jobs:
         if: ${{ !cancelled() }}
       - name: Folders reader in the app (unit)
         run: node tests/unit_folders_reader.mjs
+        if: ${{ !cancelled() }}
+      - name: Notifier dependencies (locked)
+        run: npm ci --omit=dev --no-audit --no-fund
+        working-directory: notifier
+        if: ${{ !cancelled() }}
+      - name: Notifier service over HTTP (integration)
+        run: node tests/integration_notifier.mjs
+        if: ${{ !cancelled() }}
+      - name: Notifier detection of new chapters (integration)
+        run: node tests/integration_notifier_detect.mjs
+        if: ${{ !cancelled() }}
+      - name: Notifier real sending to a local push service (integration)
+        run: node tests/integration_notifier_push.mjs
+        if: ${{ !cancelled() }}
+      - name: Notifier robustness (integration)
+        run: node tests/integration_notifier_robustness.mjs
         if: ${{ !cancelled() }}
       - name: Folders container (read-only mounts, health)
         run: tests/container_folders.sh

@@ -23,7 +23,9 @@ const SUWAYOMI_URL = (process.env.SUWAYOMI_URL || '').replace(/\/$/, '');
 const SUWAYOMI_USER = process.env.SUWAYOMI_USER || '';
 const SUWAYOMI_PASSWORD = process.env.SUWAYOMI_PASSWORD || '';
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@localhost';
-const POLL_MS = Math.max(0.05, Number(process.env.POLL_MINUTES || 10)) * 60000;
+// Valeur inutilisable (« abc », « 10min ») : le défaut ; plafonnée à un jour (au-delà de 2^31 ms, setTimeout se déclenche aussitôt).
+const POLL_MINUTES = Number(process.env.POLL_MINUTES || 10);
+const POLL_MS = Math.min(1440, Math.max(0.05, Number.isFinite(POLL_MINUTES) ? POLL_MINUTES : 10)) * 60000;
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const PORT = Number(process.env.PORT || 8787);
 const DRY_RUN = process.env.PUSH_DRY_RUN === '1';
@@ -65,13 +67,16 @@ const TEXT = {
 };
 const text = (lang) => TEXT[lang] || TEXT.en;
 
+/** Vrai si le message est parti (ou aurait dû partir, en mode d'essai). */
 async function push(sub, payload) {
-  if (DRY_RUN) { console.log('PUSH', sub.userId, JSON.stringify(payload)); return; }
+  if (DRY_RUN) { console.log('PUSH', sub.userId, JSON.stringify(payload)); return true; }
   try {
     await webpush.sendNotification(sub.subscription, JSON.stringify(payload), { TTL: 86400 });
+    return true;
   } catch (e) {
     // 404/410 : l'abonnement n'existe plus côté navigateur.
     if (e.statusCode === 404 || e.statusCode === 410) { subs.delete(sub.subscription.endpoint); await saveSubs(); } else console.warn('Envoi échoué :', e.statusCode || e.message);
+    return false;
   }
 }
 
@@ -204,13 +209,13 @@ async function poll() {
     for (const sub of [...subs.values()]) {
       if (!sub.favorites.includes(seriesId)) continue;
       const tx = text(sub.lang);
-      await push(sub, {
+      const ok = await push(sub, {
         title: list[0].seriesTitle,
         body: list.length === 1 ? tx.one(list[0].title) : tx.many(list.length),
         tag: 'series-' + seriesId,
         path: '/series/' + seriesId,
       });
-      sent++;
+      if (ok) sent++;
     }
   }
   return sent;
@@ -235,7 +240,8 @@ async function whoami(req) {
 function readJson(req) {
   return new Promise((resolve) => {
     let raw = '';
-    req.on('data', (c) => { raw += c; if (raw.length > 100000) req.destroy(); });
+    // Au-delà de la limite le corps est refusé (la première valeur donnée à resolve l'emporte) : les morceaux déjà reçus ne comptent pas.
+    req.on('data', (c) => { raw += c; if (raw.length > 100000) { resolve(null); req.destroy(); } });
     req.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve(null); } });
     req.on('error', () => resolve(null));
   });
@@ -247,7 +253,8 @@ const send = (res, status, body) => {
 const validSub = (s) => s && typeof s.endpoint === 'string' && /^https:\/\//.test(s.endpoint) && s.keys?.p256dh && s.keys?.auth;
 
 http.createServer(async (req, res) => {
-  const path = new URL(req.url, 'http://x').pathname;
+  let path;
+  try { path = new URL(req.url, 'http://x').pathname; } catch { return send(res, 400, { error: 'bad request' }); }
   try {
     if (req.method === 'GET' && path === '/health') return send(res, 200, { ok: true, subscriptions: subs.size });
     if (req.method === 'GET' && path === '/vapid') return send(res, 200, { publicKey: vapid.publicKey });
@@ -273,8 +280,9 @@ http.createServer(async (req, res) => {
     if (!sub || sub.userId !== user.id) return send(res, 404, { error: 'unknown subscription' });
     if (path === '/unsubscribe') { subs.delete(body.endpoint); await saveSubs(); return send(res, 200, { ok: true }); }
     if (path === '/test') {
-      await push(sub, { title: 'Scrollarr', body: text(sub.lang).test, tag: 'test', path: '/my/subscriptions' });
-      return send(res, 200, { ok: true });
+      // Le bouton « Envoyer un test » ne doit pas annoncer un succès quand le service de push a refusé le message.
+      const ok = await push(sub, { title: 'Scrollarr', body: text(sub.lang).test, tag: 'test', path: '/my/subscriptions' });
+      return ok ? send(res, 200, { ok: true }) : send(res, 502, { error: 'push failed' });
     }
     send(res, 404, { error: 'not found' });
   } catch (e) {
