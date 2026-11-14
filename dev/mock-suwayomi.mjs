@@ -38,10 +38,12 @@ export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody
   const metas = new Map();
   // File de téléchargement. Sans DOWNLOAD_MS, un chapitre demandé est disponible aussitôt.
   // Avec DOWNLOAD_MS=<durée par chapitre>, la file avance dans le temps, un chapitre à la fois ;
-  // DOWNLOAD_FAIL=<id de chapitre> fait échouer ce chapitre la première fois ; une relance réussit.
+  // DOWNLOAD_FAIL=<id de chapitre> fait échouer ce chapitre ; DOWNLOAD_FAIL_TIMES=<n> (1 par défaut) le nombre
+  // d'échecs avant qu'une relance ne réussisse.
   const DOWNLOAD_MS = Number(process.env.DOWNLOAD_MS || 0);
   const DOWNLOAD_FAIL = Number(process.env.DOWNLOAD_FAIL || 0);
-  let failedOnce = false;
+  const DOWNLOAD_FAIL_TIMES = Number(process.env.DOWNLOAD_FAIL_TIMES || 1);
+  let failures = 0;
   let queue = []; // { chapterId, state, progress, tries, startedAt }
   function tickQueue() {
     const now = Date.now();
@@ -49,7 +51,7 @@ export function createSuwayomiMock({ rng, coverSvg, pageSvg, send, svg, readBody
       if (item.state === 'ERROR') continue;
       if (item.state === 'QUEUED') { item.state = 'DOWNLOADING'; item.startedAt = now; }
       item.progress = Math.min(1, (now - item.startedAt) / DOWNLOAD_MS);
-      if (item.chapterId === DOWNLOAD_FAIL && !failedOnce && item.progress >= 0.5) { failedOnce = true; item.state = 'ERROR'; item.tries = 3; item.progress = 0; continue; }
+      if (item.chapterId === DOWNLOAD_FAIL && failures < DOWNLOAD_FAIL_TIMES && item.progress >= 0.5) { failures++; item.state = 'ERROR'; item.tries = 3; item.progress = 0; continue; }
       if (item.progress < 1) break; // un seul téléchargement à la fois
       const c = chapters.find((x) => x.id === item.chapterId);
       c.isDownloaded = true; c.pageCount = c._pages; item.state = 'FINISHED';

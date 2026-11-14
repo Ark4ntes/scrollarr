@@ -211,8 +211,9 @@ body.reading #offline-banner { display: none; }
 
 #toasts { position: fixed; left: 0; right: 0; bottom: calc(var(--tab-h) + var(--safe-b) + 14px); z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px; pointer-events: none; }
 body.reading #toasts { bottom: calc(84px + var(--safe-b)); }
-.toast { pointer-events: auto; display: flex; align-items: center; gap: 14px; max-width: 460px; padding: 11px 14px; background: var(--ink); color: var(--paper); border-radius: 4px; font-size: 14px; box-shadow: 0 6px 20px rgba(0, 0, 0, .28); }
-.toast button { border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; padding: 4px; }
+/* Un message ne doit pas bloquer ce qu'il recouvre : seul son éventuel bouton reçoit les clics. */
+.toast { pointer-events: none; display: flex; align-items: center; gap: 14px; max-width: 460px; padding: 11px 14px; background: var(--ink); color: var(--paper); border-radius: 4px; font-size: 14px; box-shadow: 0 6px 20px rgba(0, 0, 0, .28); }
+.toast button { pointer-events: auto; border: 0; background: none; color: inherit; font-weight: 700; text-decoration: underline; padding: 4px; }
 
 /* ── Feuilles ── */
 .sheet-wrap { position: fixed; inset: 0; z-index: 70; display: flex; align-items: flex-end; justify-content: center; background: rgba(8, 7, 14, .55); }

@@ -9,6 +9,7 @@ import { CAP } from './connectors/contract.js';
 import { validateReader } from './connectors/reader-contract.js';
 import { validateCollector, normalizeSource, normalizeSearch, normalizeAdded } from './connectors/collector-contract.js';
 import * as tasksModel from './tasks.js';
+import { deviceId } from './sync.js';
 import { events, isReachable, retryNow, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
 import { idb } from './idb.js';
 
@@ -534,11 +535,11 @@ let taskPulledAt = 0;
 let taskPushTimer;
 const pushTasks = () => { clearTimeout(taskPushTimer); taskPushTimer = setTimeout(() => syncTasks(true), 800); };
 async function syncTasks(write) {
-  if (taskSyncing || !hasStore() || !canTrackTasks()) return;
+  if (taskSyncing || !hasStore() || !canTrackTasks()) return false;
   taskSyncing = true;
   try {
     let text;
-    try { text = await getClientSetting(TASKS_DOC); } catch { return; } // serveur injoignable : on réessaiera, sans rien écraser
+    try { text = await getClientSetting(TASKS_DOC); } catch { return false; } // serveur injoignable : on réessaiera, sans rien écraser
     let remote = null;
     try { remote = JSON.parse(text); } catch { /* rien d'enregistré */ }
     taskPulledAt = Date.now();
@@ -547,9 +548,10 @@ async function syncTasks(write) {
     if (JSON.stringify(union) !== JSON.stringify({ tasks: taskList, cleared: taskCleared })) { setTasks(union.tasks, { cleared: union.cleared, share: false }); merged.clear(); }
     const doc = JSON.stringify(tasksModel.sharedView(union));
     if (write || doc !== JSON.stringify(tasksModel.sharedView(remote))) {
-      try { await setClientSetting(TASKS_DOC, doc); } catch { taskPulledAt = 0; return; }
+      try { await setClientSetting(TASKS_DOC, doc); } catch { taskPulledAt = 0; return false; }
     }
     if (taskGen !== gen) pushTasks();
+    return true;
   } finally { taskSyncing = false; }
 }
 
@@ -574,7 +576,37 @@ export const tasks = () => taskList.map((task) => ({
   ...task,
   collectorLabel: collectorLabel(task.collector),
   retryable: (task.state === 'failed' || task.state === 'cancelled') && collectorCan(task.collector, CAP.COLLECT_RETRY),
+  // Où en est la relance automatique ; rien à dire quand elle est désactivée.
+  autoRetry: autoRetryEnabled()
+    ? tasksModel.retryPlan(task, { canRetry: collectorCan(task.collector, CAP.COLLECT_RETRY), device: deviceId(), opts: retryOpts() })
+    : { status: 'none', at: null },
 }));
+
+// ── Relance automatique (politique pure : tasks.js) ──
+// Réglage de cet appareil. Activé par défaut ; « 0 » le coupe.
+const AUTO_RETRY_KEY = 'scrollarr.autoRetry';
+export const autoRetryEnabled = () => { try { return localStorage.getItem(AUTO_RETRY_KEY) !== '0'; } catch { return true; } };
+export function setAutoRetry(on) {
+  try { localStorage.setItem(AUTO_RETRY_KEY, on ? '1' : '0'); } catch { /* réglage non conservé */ }
+  taskEvents.dispatchEvent(new Event('change'));
+  if (on) refreshTasks().catch(() => {});
+}
+/**
+ * Délais de la politique. Réservé aux tests et au développement : la clé
+ * `scrollarr.dev.retry` (JSON { delays, jitterMs, claimMs }) n'est écrite par
+ * aucun écran, un utilisateur ne peut pas la poser par inadvertance
+ * (voir docs/fr/development.md). Une valeur invalide est ignorée.
+ */
+function retryOpts() {
+  try {
+    const o = JSON.parse(localStorage.getItem('scrollarr.dev.retry'));
+    const ok = (a) => Array.isArray(a) && a.length > 0 && a.every((n) => Number.isFinite(n) && n >= 0);
+    if (o && ok(o.delays)) {
+      return { ...tasksModel.RETRY, delays: o.delays, jitterMs: Number.isFinite(o.jitterMs) ? o.jitterMs : tasksModel.RETRY.jitterMs, claimMs: Number.isFinite(o.claimMs) ? o.claimMs : tasksModel.RETRY.claimMs };
+    }
+  } catch { /* clé absente ou illisible */ }
+  return tasksModel.RETRY;
+}
 const collectorCan = (id, cap) => { const k = collectors.find((x) => x.id === id); return !!k && k.capabilities.includes(cap) && collectorUsable(k); };
 /** Nombre de tâches en attente ou en cours, pour le résumé affiché dans les réglages. */
 export const activeTaskCount = () => taskList.filter(tasksModel.isActive).length;
@@ -591,18 +623,48 @@ export async function refreshTasks() {
   for (const k of trackers()) {
     try {
       const reports = (await k.tasks()).map((raw) => toTask(k, raw));
-      list = tasksModel.reconcile(list, reports);
+      list = tasksModel.reconcile(list, reports, { retry: retryOpts() });
       const gone = tasksModel.missing(list, k.id, reports);
-      if (gone.length) list = tasksModel.reconcile(list, (await k.resolveTasks(gone.map((task) => task.nativeId))).map((raw) => toTask(k, raw)));
+      if (gone.length) list = tasksModel.reconcile(list, (await k.resolveTasks(gone.map((task) => task.nativeId))).map((raw) => toTask(k, raw)), { retry: retryOpts() });
     } catch (e) {
       if (!(e instanceof OfflineError) && !(e instanceof AuthError) && !(e instanceof ApiError)) throw e;
     }
   }
   if (JSON.stringify(list) !== JSON.stringify(taskList)) { setTasks(list); merged.clear(); }
   if (Date.now() - taskPulledAt > 15000) syncTasks(false).catch(() => {}); // sans attendre : l'écran ne dépend pas des serveurs
+  await autoRetryPass();
   return tasks();
 }
 
+// Relance automatique des échecs. Sans serveur à nous, elle n'a lieu que lorsque
+// l'application est ouverte quelque part : refreshTasks tourne quand l'écran des
+// téléchargements est affiché, à l'ouverture des réglages et après une demande.
+// Jamais hors connexion, jamais si le collecteur est inutilisable, quelques
+// relances au plus par passage, et aucune erreur n'en sort.
+let autoRetrying = false;
+async function autoRetryPass() {
+  if (autoRetrying || !autoRetryEnabled() || !isReachable() || navigator.onLine === false) return;
+  autoRetrying = true;
+  try {
+    const opts = retryOpts(), me = deviceId();
+    let sent = 0;
+    for (const task of taskList.filter((x) => x.state === 'failed')) {
+      if (sent >= opts.maxPerPass) break;
+      if (tasksModel.retryPlan(task, { canRetry: collectorCan(task.collector, CAP.COLLECT_RETRY), device: me, opts }).status !== 'due') continue;
+      try {
+        if (hasStore()) {
+          // Réservation partagée puis relecture : voir `claimed` dans tasks.js.
+          setTasks(tasksModel.claimed(taskList, task.id, me, { opts }));
+          if (!(await syncTasks(true))) continue;
+          const now = taskList.find((x) => x.id === task.id);
+          if (!now || now.state !== 'failed' || now.claimBy !== me) continue;
+        }
+        await retryTask(task.id, { auto: true });
+        sent++;
+      } catch { /* une relance qui échoue sera reprise plus tard : la réservation expire */ }
+    }
+  } finally { autoRetrying = false; }
+}
 /** Annule une tâche, si son collecteur le permet. */
 export async function cancelTask(id) {
   const task = taskList.find((x) => x.id === id);
@@ -613,11 +675,13 @@ export async function cancelTask(id) {
 }
 
 /** Relance une tâche en échec ou annulée, si son collecteur le permet. */
-export async function retryTask(id) {
+export async function retryTask(id, { auto = false } = {}) {
   const task = taskList.find((x) => x.id === id);
   const k = task && collectors.find((x) => x.id === task.collector);
   if (!k || tasksModel.isActive(task) || !collectorCan(task.collector, CAP.COLLECT_RETRY)) throw new Error('Relance impossible');
   await k.retryTask(task.nativeId);
+  // Une relance manuelle remet le compte des relances automatiques à zéro ; une automatique en ajoute une.
+  setTasks(tasksModel.retried(taskList, id, { auto }));
   await refreshTasks();
 }
 

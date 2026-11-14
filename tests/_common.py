@@ -107,6 +107,10 @@ def check(name, cond, extra=''):
     if not cond:
         _failed = True
     print(('PASS ' if cond else 'FAIL ') + name, extra, flush=True)
+    if not cond and os.environ.get('GITHUB_ACTIONS'):
+        # Annotation GitHub : seule trace d'un échec lisible sans accès aux journaux de la CI.
+        detail = str(extra).replace('\r', ' ').replace('\n', ' ')[:600]
+        print(f'::error title={os.path.basename(sys.argv[0])}::FAIL {name} {detail}', flush=True)
     return cond
 
 
@@ -132,9 +136,14 @@ def run(scenario):
                 scenario(b)
             finally:
                 b.close()
-    except Exception:
+    except Exception as e:
         traceback.print_exc()
         globals()['_failed'] = True
+        if os.environ.get('GITHUB_ACTIONS'):
+            where = traceback.extract_tb(e.__traceback__)
+            line = next((f'{os.path.basename(f.filename)}:{f.lineno}' for f in reversed(where) if 'e2e_' in f.filename), '')
+            msg = str(e).replace('\r', ' ').replace('\n', ' ')[:500]
+            print(f'::error title={os.path.basename(sys.argv[0])}::{type(e).__name__} at {line} {msg}', flush=True)
     finally:
         cleanup()
     print('SOME FAILED' if _failed else 'ALL PASS', flush=True)

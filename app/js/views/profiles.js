@@ -40,15 +40,16 @@ export async function profilesView(root) {
     const current = choosing ? null : profiles.active().id;
     fill(listEl, profiles.list().map((p) => {
       const main = p.id === 'main';
+      const name = profiles.displayName(p);
       return h('li.profile' + (p.id === current ? '.on' : ''),
         h('button.profile-main', { type: 'button', onclick: () => (p.id === current ? back('/home') : profiles.choose(p.id)) },
-          h('span.avatar', { 'aria-hidden': 'true' }, (p.name.trim()[0] || '?').toUpperCase()),
+          h('span.avatar', { 'aria-hidden': 'true' }, (name.trim()[0] || '?').toUpperCase()),
           h('span.profile-text',
-            h('strong', p.name),
+            h('strong', name),
             h('small', main ? t('Historique du serveur') : t('Historique séparé')),
             p.id === current ? h('small.profile-on', t('Profil actif sur cet appareil')) : null)),
-        h('button.iconbtn', { type: 'button', 'aria-label': t('Actions pour {title}', { title: p.name }), onclick: () => actionSheet(p.name, [
-          { icon: 'settings', label: t('Renommer'), run: () => nameSheet(t('Renommer le profil'), p.name, t('Enregistrer'), async (name) => { await profiles.rename(p.id, name); paint(); }) },
+        h('button.iconbtn', { type: 'button', 'aria-label': t('Actions pour {title}', { title: name }), onclick: () => actionSheet(name, [
+          { icon: 'settings', label: t('Renommer'), run: () => nameSheet(t('Renommer le profil'), name, t('Enregistrer'), async (name) => { await profiles.rename(p.id, name); paint(); }) },
           main ? null : { icon: 'trash', danger: true, label: t('Supprimer ce profil et son historique'), run: async () => {
             try { await profiles.remove(p.id); toast(t('Profil supprimé')); paint(); }
             catch { toast(t('Enregistrement impossible : le serveur ne répond pas.')); }

@@ -34,11 +34,18 @@ export async function collect(root) {
       task.attempts > 1 ? t('{n} tentatives', { n: task.attempts }) : null,
       active ? null : fmtAgo(new Date(when).toISOString()),
     ].filter(Boolean).join(', ');
+    // Relance automatique : ce qui est prévu, à côté de l'état.
+    const plan = task.autoRetry;
+    const retryNote = plan.status === 'exhausted' ? t('nouvel essai automatique épuisé')
+      : plan.status === 'scheduled' || plan.status === 'claimed'
+        ? t('nouvel essai dans {n} min', { n: Math.max(1, Math.ceil((plan.at - Date.now()) / 60000)) })
+        : plan.status === 'due' ? t('nouvel essai imminent') : null;
     return h('div.task', { 'data-state': task.state },
       h('div.task-main',
         h(task.seriesId ? 'a.task-title' : 'p.task-title', task.seriesId ? { href: `#/series/${task.seriesId}` } : {},
           [task.seriesTitle, task.chapterTitle].filter(Boolean).join(' — ') || task.id),
         h('p.task-meta', meta),
+        retryNote ? h('p.task-meta.task-retry', { 'data-retry': plan.status }, retryNote) : null,
         task.state === 'failed' && task.error ? h('p.task-error', t(task.error)) : null,
         task.state === 'running' && task.progress !== null
           ? h('progress', { max: 1, value: task.progress, 'aria-label': t('Progression') }) : null),
@@ -70,11 +77,18 @@ export async function collect(root) {
   async function poll() {
     if (!alive) return;
     const list = await api.refreshTasks().catch(() => api.tasks());
-    if (alive) timer = setTimeout(poll, list.some((x) => x.state === 'queued' || x.state === 'running') ? 2000 : 15000);
+    if (!alive) return;
+    paint(); // le décompte « nouvel essai dans N min » avance sans changement de tâche
+    const soon = list.filter((x) => x.autoRetry.at).map((x) => x.autoRetry.at - Date.now() + 500);
+    timer = setTimeout(poll, list.some((x) => x.state === 'queued' || x.state === 'running') ? 2000 : Math.min(15000, Math.max(1000, ...[soon.length ? Math.min(...soon) : 15000])));
   }
 
   add(root, topbar(t('Téléchargements'), { fallback: '/more' }),
     h('p.note.collect-note', t('Chapitres que le serveur récupère chez la source. Ils restent sur le serveur : pour lire sans connexion, utilisez « Télécharger » sur la fiche d’une série.')),
+    h('label.field.check', h('input', { type: 'checkbox', checked: api.autoRetryEnabled(), 'data-auto-retry': '',
+      onchange: (e) => { api.setAutoRetry(e.target.checked); } }),
+      h('span', t('Relancer automatiquement les échecs'))),
+    h('p.note.collect-note', t('Trois essais espacés de 1, 5 puis 30 minutes. Les relances ne partent que si Scrollarr est ouvert sur l’un de vos appareils : rien ne se passe quand l’application est fermée.')),
     body);
   paint();
   api.taskEvents.addEventListener('change', paint);

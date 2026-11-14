@@ -15,9 +15,15 @@ const ID = /^[0-9a-f]{16}$/;
 let all = '';   // tout ce que le service a répondu, pour chercher des chemins
 const seen = (res) => { all += res.text; return res; };
 
-test('health: no session needed, lists libraries with their state and the auth mode', async () => {
+test('health: no session needed, answers only ok (no mode, no version, no library)', async () => {
   const res = seen(await get(app, '/health'));
-  assert.deepEqual(res.json, { ok: true, version: '0.1.0', auth: 'password', libraries: [{ name: 'Autre', state: 'ok' }, { name: 'Scans', state: 'ok' }] });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json, { ok: true });
+});
+test('status: behind the session, gives version, auth mode and library states', async () => {
+  assert.equal((await get(app, '/api/v1/status')).status, 401);
+  const res = seen(await api('/api/v1/status'));
+  assert.deepEqual(res.json, { version: '0.1.0', auth: 'password', libraries: [{ name: 'Autre', state: 'ok' }, { name: 'Scans', state: 'ok' }] });
 });
 let libs;
 test('libraries: opaque identifiers and names', async () => {
@@ -113,7 +119,7 @@ test('unmounted library: 503 on its routes, the other library stays readable, 20
     assert.equal(res.headers['retry-after'], '5');
   }
   assert.equal((await api('/api/v1/series?library=' + libs.find((l) => l.name === 'Scans').id)).status, 200);
-  assert.deepEqual((await get(app, '/health')).json.libraries.map((l) => l.state), ['unavailable', 'ok']);
+  assert.deepEqual((await api('/api/v1/status')).json.libraries.map((l) => l.state), ['unavailable', 'ok']);
   assert.equal((await api('/api/v1/series/0123456789abcdef')).status, 503); // inconnu mais indécidable : jamais 404
   renameSync(join(fx.root, 'demonte'), join(fx.libraries, 'Autre'));
   assert.equal((await api(`/api/v1/series/${omega.id}`)).status, 200);

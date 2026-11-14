@@ -12,8 +12,8 @@ const T = (extra) => normalize('suwayomi', raw(extra));
 test('normalize builds the common shape', () => {
   const t = T();
   assert.equal(t.id, 'suwayomi:7');
-  assert.deepEqual(Object.keys(t).sort(), ['attempts', 'cancellable', 'chapterId', 'chapterTitle', 'collector', 'createdAt', 'error', 'finishedAt',
-    'id', 'kind', 'nativeId', 'progress', 'reader', 'seriesId', 'seriesTitle', 'startedAt', 'state']);
+  assert.deepEqual(Object.keys(t).sort(), ['attempts', 'autoRetries', 'cancellable', 'chapterId', 'chapterTitle', 'claimBy', 'claimUntil', 'collector', 'createdAt', 'error', 'finishedAt',
+    'id', 'kind', 'nativeId', 'nextRetryAt', 'progress', 'reader', 'seriesId', 'seriesTitle', 'startedAt', 'state']);
   assert.equal(t.kind, 'chapter.download');
   assert.equal(t.seriesId, '3');
 });

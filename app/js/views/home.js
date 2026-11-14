@@ -25,8 +25,8 @@ export async function home(root) {
       h('div.topbar-actions', searchButton(),
         // Avec plusieurs profils, un raccourci rappelle lequel est ouvert.
         profiles.list().length > 1
-          ? h('a.avatar.small', { href: '#/profiles', 'aria-label': t('Profil : {name}. Changer de profil', { name: profiles.active().name }) },
-            (profiles.active().name.trim()[0] || '?').toUpperCase())
+          ? h('a.avatar.small', { href: '#/profiles', 'aria-label': t('Profil : {name}. Changer de profil', { name: profiles.displayName(profiles.active()) }) },
+            (profiles.displayName(profiles.active()).trim()[0] || '?').toUpperCase())
           : null)));
 
   if (!resume.length && !latest.length && !fresh.length && !updated.length) {

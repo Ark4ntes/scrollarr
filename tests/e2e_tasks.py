@@ -22,6 +22,7 @@ def stored(pg):
 def scenario(b):
     srv = server(8433, SERVERS='suwayomi', DOWNLOAD_MS='3000', DOWNLOAD_FAIL='131')
     ctx = b.new_context(viewport={'width': 390, 'height': 844}, is_mobile=True, has_touch=True, locale='fr-FR')
+    ctx.add_init_script("localStorage.setItem('scrollarr.autoRetry', '0')")  # these tests drive retries by hand
     pg = ctx.new_page()
 
     # Settings only carry a summary; the detail lives on its own screen

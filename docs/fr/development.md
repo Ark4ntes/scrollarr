@@ -32,9 +32,12 @@ Options, en variables d'environnement :
 | `FOLDERS` | non défini | Adresse d'un vrai service Dossiers vers lequel `/folders/` est relayé, par exemple `http://127.0.0.1:8788` (avec `SERVERS=folders`). |
 | `DOWNLOAD_MS` | `0` | Durée par chapitre de la file de téléchargement du faux Suwayomi. Avec `0`, un chapitre demandé est disponible aussitôt. |
 | `DOWNLOAD_FAIL` | `0` | Identifiant d'un chapitre qui échoue au premier téléchargement ; un nouvel essai réussit. |
+| `DOWNLOAD_FAIL_TIMES` | `1` | Nombre d'échecs du chapitre de `DOWNLOAD_FAIL` avant qu'un nouvel essai réussisse. |
 | `SOURCE_SLOW_MS` | `2500` | Délai de la source de démonstration lente dans la recherche chez les sources. |
 
 Exemple : `SERVERS=suwayomi SUWA_AUTH=ui node dev/mock-servers.mjs`.
+
+Raccourcir les délais de relance automatique (tests et développement seulement) : la clé `scrollarr.dev.retry` du `localStorage` du navigateur, posée depuis la console ou par le test avant le chargement de la page, remplace les délais de 1, 5 et 30 minutes, par exemple `localStorage.setItem('scrollarr.dev.retry', JSON.stringify({ delays: [1500, 1500, 1500], jitterMs: 300, claimMs: 5000 }))` (millisecondes ; `delays` fixe aussi le nombre de relances). Aucun écran n'écrit cette clé et une valeur invalide est ignorée. `scrollarr.autoRetry` à `0` coupe les relances automatiques, comme l'interrupteur de l'écran Téléchargements.
 
 Simuler un nouveau chapitre :
 
@@ -60,7 +63,7 @@ Pour le voir dans l'application, lancez le serveur de démonstration avec `SERVE
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-`app/` et le modèle nginx sont montés en lecture seule dans le conteneur : une modification apparaît après un rechargement, sans reconstruction (un changement du modèle nginx demande `docker compose restart scrollarr`). N'oubliez pas le service worker : rechargez deux fois, ou effacez les données du site dans le navigateur.
+`app/` et le modèle nginx sont montés en lecture seule dans le conteneur : une modification apparaît après un rechargement, sans reconstruction (un changement du modèle nginx demande `docker compose restart scrollarr`). Le conteneur principal n'a que quatre capacités Linux : les fichiers montés doivent donc être lisibles par « les autres » (droits 644/755, le défaut habituel). N'oubliez pas le service worker : rechargez deux fois, ou effacez les données du site dans le navigateur.
 
 ## Tests
 
@@ -75,6 +78,7 @@ node tests/unit_sync.mjs
 node tests/unit_contracts.mjs
 node tests/unit_facade.mjs
 node tests/unit_profiles.mjs
+node tests/unit_profile_name.mjs
 ```
 
 Les tests de bout en bout pilotent un Chromium sans interface contre les serveurs de démonstration :
@@ -90,7 +94,7 @@ Chaque script affiche des lignes `PASS` ou `FAIL` puis `ALL PASS` ou `SOME FAILE
 
 ## Intégration continue
 
-- `.github/workflows/ci.yml` se lance à chaque envoi et à chaque demande de fusion, en trois tâches : `syntax` (Node 22 : `check_syntax.sh`, les tests unitaires, le test des en-têtes nginx), `e2e` (Playwright et Chromium, tous les scripts de bout en bout, captures d'écran conservées en cas d'échec) et `folders` (les tests du service Dossiers et les deux tests de conteneur, `tests/container_folders.sh` et `tests/container_perms.sh`).
+- `.github/workflows/ci.yml` se lance à chaque envoi et à chaque demande de fusion, en trois tâches : `syntax` (Node 22 : `check_syntax.sh`, les tests unitaires, le test des en-têtes nginx), `e2e` (Playwright et Chromium, tous les scripts de bout en bout, captures d'écran conservées en cas d'échec) et `folders` (les tests du service Dossiers et les trois tests de conteneur, `tests/container_folders.sh`, `tests/container_perms.sh` et `tests/container_hardening.sh`, ce dernier en trois étapes séparées).
 - `.github/workflows/docker.yml` construit les trois images pour `amd64` et `arm64`. Il les publie sur `ghcr.io/ark4ntes/` lors d'un envoi sur `main` (étiquette `edge`) et d'une étiquette `v*` (`X.Y.Z`, `X.Y`, `latest`) ; les demandes de fusion ne font que construire. Voir [Installation](installation.md#quelles-images-existent).
 
 ## Organisation du projet
