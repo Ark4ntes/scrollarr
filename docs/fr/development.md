@@ -79,6 +79,15 @@ node tests/unit_contracts.mjs
 node tests/unit_facade.mjs
 node tests/unit_profiles.mjs
 node tests/unit_profile_name.mjs
+node tests/unit_sw_push.mjs
+```
+
+Tests du notifier (ils lancent le vrai notifier ; lancez d'abord `npm ci --omit=dev` dans `notifier/`, et `openssl` est nécessaire pour celui qui envoie pour de vrai) :
+
+```sh
+node tests/integration_notifier.mjs
+node tests/integration_notifier_detect.mjs
+node tests/integration_notifier_push.mjs
 ```
 
 Les tests de bout en bout pilotent un Chromium sans interface contre les serveurs de démonstration :
@@ -88,13 +97,14 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -r tests/requirements.txt
 python -m playwright install chromium
 python tests/e2e_servers.py
+python tests/e2e_push.py
 ```
 
-Chaque script affiche des lignes `PASS` ou `FAIL` puis `ALL PASS` ou `SOME FAILED`. Ils utilisent des ports fixes (8391 à 8470) : arrêtez d'abord un serveur de démonstration resté actif. Les tests du service Dossiers demandent `npm ci --omit=dev` dans `folders/`. La liste complète des scripts, avec ce que chacun vérifie et sa durée, est dans [tests/README.md](../../tests/README.md).
+Chaque script affiche des lignes `PASS` ou `FAIL` puis `ALL PASS` ou `SOME FAILED`. Ils utilisent des ports fixes (8391 à 8470, 8481 à 8485) : arrêtez d'abord un serveur de démonstration resté actif. Les tests du service Dossiers demandent `npm ci --omit=dev` dans `folders/`. La liste complète des scripts, avec ce que chacun vérifie et sa durée, est dans [tests/README.md](../../tests/README.md).
 
 ## Intégration continue
 
-- `.github/workflows/ci.yml` se lance à chaque envoi et à chaque demande de fusion, en trois tâches : `syntax` (Node 22 : `check_syntax.sh`, les tests unitaires, le test des en-têtes nginx), `e2e` (Playwright et Chromium, tous les scripts de bout en bout, captures d'écran conservées en cas d'échec) et `folders` (les tests du service Dossiers et les trois tests de conteneur, `tests/container_folders.sh`, `tests/container_perms.sh` et `tests/container_hardening.sh`, ce dernier en trois étapes séparées).
+- `.github/workflows/ci.yml` se lance à chaque envoi et à chaque demande de fusion, en trois tâches : `syntax` (Node 22 : `check_syntax.sh`, les tests unitaires, le test des en-têtes nginx), `e2e` (Playwright et Chromium, tous les scripts de bout en bout, captures d'écran conservées en cas d'échec) et `folders` (les tests du service Dossiers, ceux du notifier, qui lancent d'abord `npm ci` dans `notifier/`, et les trois tests de conteneur, `tests/container_folders.sh`, `tests/container_perms.sh` et `tests/container_hardening.sh`, ce dernier en trois étapes séparées).
 - `.github/workflows/docker.yml` construit les trois images pour `amd64` et `arm64`. Il les publie sur `ghcr.io/ark4ntes/` lors d'un envoi sur `main` (étiquette `edge`) et d'une étiquette `v*` (`X.Y.Z`, `X.Y`, `latest`) ; les demandes de fusion ne font que construire. Voir [Installation](installation.md#quelles-images-existent).
 
 ## Organisation du projet

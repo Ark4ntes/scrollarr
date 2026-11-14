@@ -79,6 +79,15 @@ node tests/unit_contracts.mjs
 node tests/unit_facade.mjs
 node tests/unit_profiles.mjs
 node tests/unit_profile_name.mjs
+node tests/unit_sw_push.mjs
+```
+
+Notifier tests (they start the real notifier; run `npm ci --omit=dev` in `notifier/` first, and `openssl` is needed for the one that sends for real):
+
+```sh
+node tests/integration_notifier.mjs
+node tests/integration_notifier_detect.mjs
+node tests/integration_notifier_push.mjs
 ```
 
 The end-to-end tests drive a headless Chromium against the demo servers:
@@ -88,13 +97,14 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -r tests/requirements.txt
 python -m playwright install chromium
 python tests/e2e_servers.py
+python tests/e2e_push.py
 ```
 
-Each script prints `PASS` or `FAIL` lines then `ALL PASS` or `SOME FAILED`. They use fixed ports (8391 to 8470): stop a stale demo server first. The tests of the folders service need `npm ci --omit=dev` in `folders/`. The full list of scripts, with what each checks and how long it takes, is in [tests/README.md](../../tests/README.md).
+Each script prints `PASS` or `FAIL` lines then `ALL PASS` or `SOME FAILED`. They use fixed ports (8391 to 8470, 8481 to 8485): stop a stale demo server first. The tests of the folders service need `npm ci --omit=dev` in `folders/`. The full list of scripts, with what each checks and how long it takes, is in [tests/README.md](../../tests/README.md).
 
 ## Continuous integration
 
-- `.github/workflows/ci.yml` runs on every push and pull request, in three jobs: `syntax` (Node 22: `check_syntax.sh`, the unit tests, the nginx headers test), `e2e` (Playwright and Chromium, all end-to-end scripts, screenshots kept if something fails) and `folders` (the folders service tests and the three container tests, `tests/container_folders.sh`, `tests/container_perms.sh` and `tests/container_hardening.sh`, the last one in three separate steps).
+- `.github/workflows/ci.yml` runs on every push and pull request, in three jobs: `syntax` (Node 22: `check_syntax.sh`, the unit tests, the nginx headers test), `e2e` (Playwright and Chromium, all end-to-end scripts, screenshots kept if something fails) and `folders` (the folders service tests, the notifier tests, which first run `npm ci` in `notifier/`, and the three container tests, `tests/container_folders.sh`, `tests/container_perms.sh` and `tests/container_hardening.sh`, the last one in three separate steps).
 - `.github/workflows/docker.yml` builds the three images for `amd64` and `arm64`. It publishes them to `ghcr.io/ark4ntes/` on a push to `main` (tag `edge`) and on a `v*` tag (`X.Y.Z`, `X.Y`, `latest`); pull requests only build. See [Installation](installation.md#which-images-exist).
 
 ## Project layout
