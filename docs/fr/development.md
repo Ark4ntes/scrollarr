@@ -82,12 +82,13 @@ node tests/unit_profile_name.mjs
 node tests/unit_sw_push.mjs
 ```
 
-Tests du notifier (ils lancent le vrai notifier ; lancez d'abord `npm ci --omit=dev` dans `notifier/`, et `openssl` est nécessaire pour celui qui envoie pour de vrai) :
+Tests du notifier (ils lancent le vrai notifier ; lancez d'abord `npm ci --omit=dev` dans `notifier/`, et `openssl` est nécessaire pour les deux qui envoient pour de vrai) :
 
 ```sh
 node tests/integration_notifier.mjs
 node tests/integration_notifier_detect.mjs
 node tests/integration_notifier_push.mjs
+node tests/integration_notifier_robustness.mjs
 ```
 
 Les tests de bout en bout pilotent un Chromium sans interface contre les serveurs de démonstration :

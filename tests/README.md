@@ -10,7 +10,7 @@ tests/check_syntax.sh
 
 Runs `node --check` on `app/js/**`, `app/sw.js`, `dev/**`, `notifier/server.js` and `folders/*.js`, then parses every GraphQL query of the Suwayomi connector. The `graphql` package is installed in `tests/graphql/` only (the repo root has no `package.json`). Requires Node 22 and network access for `npm install`.
 
-The folders tests import `yauzl`: run `npm ci --omit=dev` in `folders/` once before them (CI does). The notifier tests start the real notifier (`notifier/server.js`), which needs `web-push`: run `npm ci --omit=dev` in `notifier/` first (CI does). `integration_notifier_push.mjs`, which sends for real, also needs `openssl` to make a throwaway certificate.
+The folders tests import `yauzl`: run `npm ci --omit=dev` in `folders/` once before them (CI does). The notifier tests start the real notifier (`notifier/server.js`), which needs `web-push`: run `npm ci --omit=dev` in `notifier/` first (CI does). The two push tests that send for real (`integration_notifier_push.mjs`, and `integration_notifier_robustness.mjs`) also need `openssl` to make a throwaway certificate.
 
 ## End-to-end tests (~4 minutes for both scripts)
 
@@ -46,6 +46,7 @@ node tests/unit_sw_push.mjs         # service worker: the push and notificationc
 node tests/integration_notifier.mjs  # notifier service over HTTP, started for real with PUSH_DRY_RUN=1 next to the demo servers: startup, VAPID keys, who may subscribe (every Suwayomi auth mode, Komga), subscribe/unsubscribe/test, bad bodies, persistence (~10 s)
 node tests/integration_notifier_detect.mjs  # notifier detection: first check records only, one notification per series and device, languages, followed list, Komga and Suwayomi paths, service credentials, restarts, servers down (checks every 3 s, so ~3 min)
 node tests/integration_notifier_push.mjs    # notifier real sending to a local HTTPS fake push service: encrypted payload decrypted with the device key, VAPID header, 404/410 remove the subscription, other failures keep it (~20 s)
+node tests/integration_notifier_robustness.mjs  # notifier robustness: malformed request target, oversize body, unusable POLL_MINUTES, test route reporting a refused send (~15 s)
 tests/container_folders.sh           # folders image with read-only mounts, reads a page and a cover inside it (needs Docker)
 tests/container_perms.sh        # images still work when the sources were fetched with modes 600/700 (needs Docker)
 tests/container_hardening.sh [main|proxy|notifier]  # main container and notifier started with exactly the hardening options of docker-compose.yml (read from `docker compose config`): page served, request proxied to a throwaway upstream, notifier health/VAPID and data volume; one scenario per CI step (needs Docker)

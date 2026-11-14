@@ -82,12 +82,13 @@ node tests/unit_profile_name.mjs
 node tests/unit_sw_push.mjs
 ```
 
-Notifier tests (they start the real notifier; run `npm ci --omit=dev` in `notifier/` first, and `openssl` is needed for the one that sends for real):
+Notifier tests (they start the real notifier; run `npm ci --omit=dev` in `notifier/` first, and `openssl` is needed for the two that send for real):
 
 ```sh
 node tests/integration_notifier.mjs
 node tests/integration_notifier_detect.mjs
 node tests/integration_notifier_push.mjs
+node tests/integration_notifier_robustness.mjs
 ```
 
 The end-to-end tests drive a headless Chromium against the demo servers:

@@ -179,6 +179,9 @@ jobs:
       - name: Notifier real sending to a local push service (integration)
         run: node tests/integration_notifier_push.mjs
         if: ${{ !cancelled() }}
+      - name: Notifier robustness (integration)
+        run: node tests/integration_notifier_robustness.mjs
+        if: ${{ !cancelled() }}
       - name: Folders container (read-only mounts, health)
         run: tests/container_folders.sh
         if: ${{ !cancelled() }}
