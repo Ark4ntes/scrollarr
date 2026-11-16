@@ -126,7 +126,7 @@ img { max-width: 100%; }
   transform: rotate(4deg); background: #2a2836; border-radius: 3px; overflow: hidden;
   box-shadow: -10px 14px 0 rgba(0, 0, 0, .45);
 }
-.hero-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hero-cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
 .hero-text { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 22px 18px 20px; width: 64%; min-height: 236px; }
 .hero-kicker { font-size: 13px; font-weight: 600; color: color-mix(in srgb, var(--block-ink) 70%, transparent); }
 .hero h2 { font: 800 38px/.98 var(--display); letter-spacing: .005em; text-wrap: balance; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -149,7 +149,9 @@ img { max-width: 100%; }
 
 .card { display: block; min-width: 0; }
 .card-img { position: relative; aspect-ratio: 2 / 3; border-radius: 3px; overflow: hidden; background: var(--line); }
-.card-img img, .resume-img img, .ep-img img, .line-img img, .shero-cover img, .nextcard-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Cadrage par le haut : quand la couverture est une première page en longue bande (webtoon),
+   on montre son début plutôt que le milieu d'une planche. Sans effet sur une couverture au bon format. */
+.card-img img, .resume-img img, .ep-img img, .line-img img, .shero-cover img, .nextcard-img img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
 img.missing { visibility: hidden; }
 .card-title { margin-top: 7px; font-weight: 650; font-size: 14px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .card-sub { margin-top: 2px; color: var(--tone); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -389,7 +391,7 @@ body:has(.who) { padding-bottom: 0; }
 .src-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .src-item { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; min-height: 72px; }
 .src-cover { flex: none; width: 48px; aspect-ratio: 2 / 3; border-radius: 3px; overflow: hidden; background: var(--line); }
-.src-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.src-cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
 .src-text { flex: 1; min-width: 0; }
 .src-title { font-weight: 650; font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
 .src-sub { margin-top: 2px; color: var(--tone); font-size: 13px; }
