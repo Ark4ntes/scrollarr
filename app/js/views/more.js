@@ -3,7 +3,7 @@ import * as store from '../store.js';
 import * as downloads from '../downloads.js';
 import * as push from '../push.js';
 import * as profiles from '../profiles.js';
-import { h, toast, fmtBytes, add, fill, icon } from '../ui.js';
+import { h, toast, fmtBytes, add, fill, icon, sheet } from '../ui.js';
 import { t } from '../i18n.js';
 import { topbar } from '../components.js';
 import { go, refresh } from '../router.js';
@@ -65,8 +65,42 @@ export async function more(root) {
         usable.map((s) => h('option', { value: s.id, selected: api.dedupe() && s.primary }, t('Garder celle de {server}', { server: s.label }))),
         h('option', { value: 'all', selected: !api.dedupe() }, t('Afficher les deux'))))),
     ] : [];
+    // Les décisions déjà prises restent visibles même si un seul serveur est utilisé pour l'instant.
+    if (usable.length > 1 || api.matchCount()) both.push(matchesLine());
 
     return h('section.panel', h('h2', list.length > 1 ? t('Serveurs') : t('Serveur')), rows, both);
+  }
+
+  // ── Décisions manuelles sur les doublons : un résumé, et une feuille pour les revoir ──
+  function matchesLine() {
+    const n = api.matchCount();
+    const line = h('p.note', n === 0 ? t('Aucune décision manuelle sur les doublons. Elles se prennent sur la fiche d’une série.')
+      : n === 1 ? t('1 décision manuelle sur les doublons.') : t('{n} décisions manuelles sur les doublons.', { n }));
+    return h('div.matches', line, n ? h('button.btn.small', { type: 'button', onclick: matchesSheet }, t('Voir les décisions')) : null);
+  }
+
+  function matchesSheet() {
+    sheet(t('Décisions sur les doublons'), (body) => {
+      const list = h('div.matches-list');
+      const KIND = { same: t('Même série'), diff: t('Séries différentes') };
+      const SIDE = { missing: t('Introuvable chez ce serveur'), unknown: t('Serveur non vérifié') };
+      const side = (x) => h('p.src-sub', h('strong', x.title || x.id), ` · ${x.serverLabel}`, x.state === 'ok' ? '' : ` · ${SIDE[x.state]}`);
+      async function paint() {
+        let rows;
+        try { rows = await api.manualMatches(); } catch { rows = []; }
+        if (!rows.length) return fill(list, h('p.note', t('Aucune décision manuelle sur les doublons.')));
+        fill(list, rows.map((r) => h('div.copy' + (r.a.state === 'missing' || r.b.state === 'missing' ? '.orphan' : ''),
+          h('div.src-text', h('p.src-title', KIND[r.kind]), side(r.a), side(r.b),
+            r.ineffective ? h('p.src-sub', t('Sans effet : une autre décision la contredit.')) : null),
+          h('div.copy-actions', h('button.btn.small', { type: 'button', onclick: () => {
+            const undo = api.removeMatch(r.key);
+            toast(t('Décision retirée.'), { action: t('Défaire'), onAction: () => { undo.undo(); paint(); refresh(); }, duration: 6000 });
+            paint(); refresh();
+          } }, t('Retirer'))))));
+      }
+      body.append(h('p.note.sheet-note', t('Les décisions dont une série n’existe plus sont signalées : le service Dossiers change l’identifiant d’une série quand son dossier est renommé. Retirez-les, puis regroupez de nouveau si besoin.')), list);
+      paint();
+    });
   }
 
   // ── Collecte : résumé seulement, le détail est sur son propre écran ──

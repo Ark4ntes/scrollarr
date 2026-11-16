@@ -56,7 +56,21 @@ Plain folders of images and CBZ/ZIP archives, with neither Suwayomi nor Komga. L
 
 ### Several servers at once
 
-With two servers active, lists are merged. When a series has the same title on both (typical: Suwayomi downloads, Komga scans the same folder), one is shown. The setting *When a series exists on several servers* in *Settings > Servers* picks which (*Keep the one from Suwayomi*...), or shows both (*Show both*). Matching is by title only: two different series with the same title are taken for one. Reading progress stays specific to each server. The default order of priority is Suwayomi, Komga, Folders.
+With two servers active, lists are merged. When a series has the same title on both (typical: Suwayomi downloads, Komga scans the same folder), one is shown. The setting *When a series exists on several servers* in *Settings > Servers* picks which (*Keep the one from Suwayomi*...), or shows both (*Show both*). The automatic match is by title only (compared without accents, case or punctuation): two different series with the same title are taken for one, and the same series under two different titles (for example a folder named "Dr. Stone T01 à T18 [Ebooks Officiels]" next to "Dr. Stone") is not recognised. Reading progress stays specific to each server. The default order of priority is Suwayomi, Komga, Folders.
+
+#### Correcting duplicates by hand
+
+Both mistakes can be corrected by hand, on the series page, without changing the automatic rule:
+
+- **These are the same series.** Series menu (the three dots), *Group with another series...*: a search field, filled with the current title, lists the series of the *other* servers. Choose one: only the series of the server with the highest priority stays in the library, home rows and search; the toast says which one, with *Undo*. If you were looking at the one that is now hidden, you land on the visible one. A group has at most one series per server, and the decision applies to the pair you chose: chain several to group three servers.
+- **These are not the same series.** A series that hides copies shows a line *Also on Komga, Folders*. It opens a sheet listing each copy (server, title, why it is hidden), with *Open* and *Not the same series*. The copy then appears in the library again; if only its title was hiding it, the pair is recorded as "different" so that the title no longer hides it. A copy opened directly (from the sheet, or by its address) shows a notice that it is grouped with another series, with a way back.
+- **Review.** *Settings > Servers* shows the number of manual decisions under the duplicate setting, and *Review decisions* lists them, orphaned ones included, with *Remove* (and *Undo*).
+
+Order of the rules for a series from a lower-priority server: a "different" decision for a pair means the title never hides it behind that one; a "same" decision hides it behind the group's highest-priority series that still exists; otherwise the title match applies. *Show both* turns all of it off, decisions included, until you choose a server again.
+
+Decisions are global to the installation (not per profile). They are stored as one document, `scrollarr.matches`, in the key-value store of Suwayomi and Komga like subscriptions, merged entry by entry between devices, and kept on the device only when no server can store it (a Folders-only installation has a single server, so nothing to group). A decision names each series by its server and its identifier on that server, plus its title at that time; the identifier is never used alone.
+
+Limits, on purpose: progress, chapters, covers and metadata are **not** merged. The visible series is the one from the highest-priority server; the others are reachable from its sheet. The Folders service gives a series a new identifier when its folder is renamed: the decision no longer matches, hides nothing, and is listed as not found in *Settings*, where you remove it and group again. There is no automatic title cleaning, fuzzy matching or merged series page yet (roadmap, phase 4).
 
 ## Capabilities (for developers)
 

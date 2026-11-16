@@ -6,7 +6,7 @@ import * as push from './push.js';
 import * as profiles from './profiles.js';
 import { h, icon, spinner, toast, emptyState } from './ui.js';
 import { t, lang } from './i18n.js';
-import { go, consumeForward, currentPath } from './router.js';
+import { go, consumeForward, currentPath, refresh } from './router.js';
 import { home } from './views/home.js';
 import { library } from './views/library.js';
 import { search } from './views/search.js';
@@ -71,6 +71,9 @@ addEventListener('online', () => { paintBanner(); reconnect(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine && !api.isReachable()) reconnect(); });
 setInterval(() => { if (!document.hidden && navigator.onLine && !api.isReachable()) reconnect(); }, 30000);
 addEventListener('offline', paintBanner);
+
+// Une décision sur les doublons prise sur un autre appareil change ce qui s'affiche : on redessine (sauf en lecture).
+api.matchEvents.addEventListener('change', (e) => { if (e.detail.remote && !document.body.classList.contains('reading')) refresh(); });
 
 api.events.addEventListener('unauthorized', () => {
   ready = false;
