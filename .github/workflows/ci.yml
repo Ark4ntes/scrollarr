@@ -38,6 +38,8 @@ jobs:
         run: node tests/unit_profile_name.mjs
       - name: Subscriptions (unit)
         run: node tests/unit_store.mjs
+      - name: Manual series decisions (unit)
+        run: node tests/unit_matching.mjs
       - name: Service worker push handlers (unit)
         run: node tests/unit_sw_push.mjs
       - name: Security headers (nginx)

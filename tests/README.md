@@ -54,6 +54,7 @@ python3 tests/nginx_headers.py # security headers on every nginx location, /fold
 node tests/unit_profiles.mjs    # profile sync: independent documents, list merge, main profile name in French (~8 s)
 node tests/unit_profile_name.mjs  # main profile name with an English interface: "Main" shown, "Principal" stored, custom name kept, merge with an older list (instant)
 node tests/unit_store.mjs       # subscriptions: a 404 must be seen twice, 24 h apart, before deleting (instant)
+node tests/unit_matching.mjs   # manual series decisions (pure module): groups, transitivity, one series per server, "different" against the title match, undo, merge with tombstones, bound, garbage input (instant)
 node tests/unit_facade.mjs      # facade with test-only readers: one without progress.write, one that keeps progress per profile (instant)
 node tests/unit_folders_reader.mjs  # folders reader with a stubbed fetch: URLs, auth modes, bodiless writes carry a JSON body (instant)
 python tests/e2e_progress.py    # a reader that does not declare progress.write: no menu action, no request (~30 s)
