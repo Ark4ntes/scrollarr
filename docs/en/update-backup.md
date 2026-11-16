@@ -122,7 +122,7 @@ A new machine also needs your reverse proxy and certificate ([Synology](synology
 None of this is in a backup of the NAS, and none of it follows a restore:
 
 - Settings of the interface (theme, language, reader settings), which servers are switched on, the profile open on this device, the way duplicate series are handled.
-- A copy of the subscriptions and of the profiles, kept in step with the servers.
+- A copy of the subscriptions, of the profiles and of the manual decisions about duplicate series, kept in step with the servers.
 - The chapters downloaded for offline reading (they live in this browser only), and the copies of recent answers that let you browse without a connection.
 - Recent searches and the choice of sources to search.
 - Reading progress made offline, waiting to be sent.

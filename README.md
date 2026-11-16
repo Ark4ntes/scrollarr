@@ -121,7 +121,7 @@ First published version: 0.9.0 (November 2026). Versions and their notes are und
 - **Not tried.** Safari on iOS. Delivery of push notifications (subscribing and detecting new chapters work in tests; the sending itself was never run). Searching the sources and adding a series was only tested against the mock server, not a real Suwayomi, and shows the first page of results per source.
 - A Suwayomi chapter that is not downloaded is fetched from its source when opened: the first display can take several seconds.
 - There is no automatic follow or download of new chapters yet.
-- Duplicates across servers are recognised by title only.
+- Duplicates across servers are recognised automatically by title only; you can correct a wrong or missed match by hand on the series page (*Group with another series...*, *Not the same series*). Progress, chapters and covers are not merged: the series of the highest-priority server is shown. A Folders series changes identifier when its folder is renamed, which breaks a decision about it.
 - Two devices changing the same entry of a shared profile without having seen each other: one of the two is kept, the same on every device, but nothing says which was last.
 - On iOS, the system decides how much storage downloads may use, and may reclaim it if the app is not on the home screen.
 - The folders service reads image folders and CBZ/ZIP only (no CBR, RAR, 7z, PDF), and a folders-only installation has no profile management.

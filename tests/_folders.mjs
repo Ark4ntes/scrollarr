@@ -20,7 +20,11 @@ export function suite(title) {
     async run() {
       let failed = 0;
       for (const [name, fn] of tests) {
-        try { await fn(); console.log('PASS ' + name); } catch (e) { failed++; console.log('FAIL ' + name + '\n  ' + (e.stack || e.message).split('\n').slice(0, 4).join('\n  ')); }
+        try { await fn(); console.log('PASS ' + name); } catch (e) {
+          failed++; console.log('FAIL ' + name + '\n  ' + (e.stack || e.message).split('\n').slice(0, 4).join('\n  '));
+          // Annotation GitHub : seule trace d'un échec lisible sans accès aux journaux de la CI.
+          if (process.env.GITHUB_ACTIONS) console.log(`::error title=${(process.argv[1] || '').split('/').pop()}::FAIL ${name} -- ${String(e.message).replace(/\s+/g, ' ').slice(0, 500)}`);
+        }
       }
       console.log(failed ? `\n${failed} test(s) failed (${title})` : `\nAll ${title} tests passed (${tests.length})`);
       process.exit(failed ? 1 : 0);

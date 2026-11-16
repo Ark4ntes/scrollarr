@@ -122,7 +122,7 @@ Une nouvelle machine demande aussi votre proxy inversé et votre certificat ([Sy
 Rien de tout cela n'est dans une sauvegarde du NAS, et rien ne revient avec une restauration :
 
 - Les réglages de l'interface (thème, langue, réglages du lecteur), les serveurs activés, le profil ouvert sur cet appareil, la façon de traiter les séries en double.
-- Une copie des abonnements et des profils, tenue à jour avec les serveurs.
+- Une copie des abonnements, des profils et des décisions manuelles sur les séries en double, tenue à jour avec les serveurs.
 - Les chapitres téléchargés pour la lecture hors ligne (ils n'existent que dans ce navigateur), et les copies des réponses récentes qui permettent de naviguer sans connexion.
 - Les recherches récentes et le choix des sources à interroger.
 - La progression de lecture faite hors ligne, en attente d'envoi.

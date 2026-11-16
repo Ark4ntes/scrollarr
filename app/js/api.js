@@ -10,6 +10,7 @@ import { validateReader } from './connectors/reader-contract.js';
 import { validateCollector, normalizeSource, normalizeSearch, normalizeAdded } from './connectors/collector-contract.js';
 import * as tasksModel from './tasks.js';
 import { deviceId } from './sync.js';
+import * as matching from './matching.js';
 import { events, isReachable, retryNow, forgetServer, memo, normTitle, AuthError, OfflineError, ApiError } from './net.js';
 import { idb } from './idb.js';
 
@@ -62,6 +63,7 @@ async function check(s) {
 export async function connect() {
   await Promise.all(servers.filter((s) => s.enabled).map(check));
   titles.clear();
+  syncMatches(false).catch(() => {});
   return serverList();
 }
 
@@ -104,7 +106,7 @@ export const hasStore = () => servers.some((s) => s.enabled && s.c.capabilities.
 /** Vrai si chaque serveur utilisé sait dire où en est la lecture d'une série (filtre « Lecture » de la bibliothèque). */
 export const canFilterByStatus = () => active().every((c) => c.capabilities.includes(CAP.PROGRESS_READ));
 /** Change dès que l'ensemble des serveurs utilisés (ou la règle des doublons) change. */
-export const signature = () => active().map((c) => c.id).join('+') + (dedupe() ? '' : '+all');
+export const signature = () => active().map((c) => c.id).join('+') + (dedupe() ? '+m' + matchRev : '+all');
 /** Vrai si l'identifiant appartient à un serveur actuellement utilisable. */
 export function reachable(id) { try { route(id); return true; } catch { return false; } }
 export const serverLabel = (id) => find(id).label;
@@ -219,34 +221,75 @@ async function everySeries(c, filters) {
   return out;
 }
 
-// Titres déjà fournis par un serveur plus prioritaire : sert à masquer les doublons.
+// ───────────── Séries en double ─────────────
+// Une série d'un serveur moins prioritaire est masquée quand le même ouvrage existe chez un serveur plus
+// prioritaire. Trois règles, dans cet ordre (voir matching.js pour les décisions manuelles) :
+//  1. une décision « pas la même série » protège la paire : l'égalité des titres ne la masque pas ;
+//  2. une décision « même série » masque les membres du groupe des serveurs moins prioritaires ;
+//  3. sinon, des titres égaux une fois normalisés (règle d'origine, inchangée).
+// Le réglage « Afficher les deux » coupe tout, décisions comprises.
+const titleOf = (s) => s.metadata?.title || s.name || '';
+// Séries de chaque serveur (identifiant natif, titre, titre normalisé). Ne dépend pas des décisions : elles
+// sont relues à chaque calcul, seules les listes fusionnées (`merged`) sont à vider quand elles changent.
 const titles = memo(60000);
-async function shadows() {
-  const list = active();
-  const map = new Map(list.map((c) => [c.id, new Set()]));
-  if (list.length < 2 || !dedupe()) return map;
-  const seen = new Set();
-  for (const c of list) {
-    map.set(c.id, new Set(seen));
-    if (c === list.at(-1)) break;
-    const names = await titles(c.id, () => everySeries(c, {}).then((all) => all.map((s) => normTitle(s.metadata?.title || s.name))));
-    names.forEach((n) => seen.add(n));
+const inventory = (c) => titles(c.id, () => everySeries(c, {}).then((all) => {
+  const byId = new Map();
+  const byNorm = new Map();
+  for (const s of all) {
+    const e = { id: String(s.id), title: titleOf(s), norm: normTitle(titleOf(s)) };
+    byId.set(e.id, e);
+    if (!byNorm.has(e.norm)) byNorm.set(e.norm, []);
+    byNorm.get(e.norm).push(e);
   }
-  return map;
+  return { byId, byNorm };
+}));
+
+const NO_HIDE = { on: false, verdict: () => null, list: [], inv: new Map() };
+/**
+ * Ce qui masque quoi. `verdict(connecteur, idNatif, titre)` renvoie null (la série s'affiche) ou
+ * { reason: 'auto' | 'manual', by: { server, id, title } } : la série qui reste à sa place.
+ * L'inventaire du dernier serveur n'est lu que si `all` : il ne masque rien, mais on veut parfois le lister.
+ */
+async function shadows({ all = false, doc = matchDoc } = {}) {
+  const list = active();
+  if (list.length < 2 || !dedupe()) return NO_HIDE;
+  const inv = new Map(await Promise.all((all ? list : list.slice(0, -1)).map(async (c) => [c.id, await inventory(c)])));
+  const rank = new Map(list.map((c, i) => [c.id, i]));
+  const { of } = matching.groups(doc);
+  const diffs = matching.diffPairs(doc);
+  const verdict = (c, rawId, title) => {
+    const mine = rank.get(c.id);
+    if (mine === undefined) return null;
+    const me = { s: c.id, i: String(rawId ?? '') };
+    const group = rawId === undefined || rawId === null ? null : of.get(matching.refKey(me));
+    if (group) {
+      // Une série qui n'existe plus (dossier renommé) ne masque personne.
+      const best = group.members.filter((m) => rank.get(m.s) < mine && inv.get(m.s)?.byId.has(m.i))
+        .sort((x, y) => rank.get(x.s) - rank.get(y.s))[0];
+      if (best) return { reason: 'manual', by: { server: best.s, id: best.i, title: inv.get(best.s).byId.get(best.i).title } };
+    }
+    const norm = normTitle(title);
+    for (const c2 of list.slice(0, mine)) {
+      const hit = inv.get(c2.id)?.byNorm.get(norm)?.find((y) => !diffs.has(matching.pairKey(me, { s: c2.id, i: y.id })));
+      if (hit) return { reason: 'auto', by: { server: c2.id, id: hit.id, title: hit.title } };
+    }
+    return null;
+  };
+  return { on: true, verdict, list, inv };
 }
-const kept = (map, c, title) => !map.get(c.id)?.has(normTitle(title));
+const kept = (plan, c, rawId, title) => !plan.verdict(c, rawId, title);
 
 const byDateDesc = (get) => (a, b) => (get(b) || '').localeCompare(get(a) || '');
 
 async function mergedBooks(method, size, dateOf) {
-  const [parts, hide] = await Promise.all([gather((c) => c[method](size)), shadows().catch(() => new Map())]);
-  const items = parts.flatMap(([c, r]) => r.content.filter((b) => kept(hide, c, b.seriesTitle)).map((b) => tagBook(c, b)));
+  const [parts, hide] = await Promise.all([gather((c) => c[method](size)), shadows().catch(() => NO_HIDE)]);
+  const items = parts.flatMap(([c, r]) => r.content.filter((b) => kept(hide, c, b.seriesId, b.seriesTitle)).map((b) => tagBook(c, b)));
   if (dateOf && parts.length > 1) items.sort(byDateDesc(dateOf));
   return { content: items.slice(0, size) };
 }
 async function mergedSeries(method, size, dateOf) {
-  const [parts, hide] = await Promise.all([gather((c) => c[method](size)), shadows().catch(() => new Map())]);
-  const items = parts.flatMap(([c, r]) => r.content.filter((s) => kept(hide, c, s.metadata?.title || s.name)).map((s) => tagSeries(c, s)));
+  const [parts, hide] = await Promise.all([gather((c) => c[method](size)), shadows().catch(() => NO_HIDE)]);
+  const items = parts.flatMap(([c, r]) => r.content.filter((s) => kept(hide, c, s.id, titleOf(s))).map((s) => tagSeries(c, s)));
   if (parts.length > 1) items.sort(byDateDesc(dateOf));
   return { content: items.slice(0, size) };
 }
@@ -269,7 +312,7 @@ const SORTERS = {
 };
 
 export async function seriesList({ libraryId, page = 0, size = 30, ...filters } = {}) {
-  const hide = await shadows().catch(() => new Map());
+  const hide = await shadows().catch(() => NO_HIDE);
   const list = active();
   // Le serveur ne connaît pas l'état de lecture d'un profil secondaire : ce filtre se fait ici.
   const status = overlay ? filters.readStatus : undefined;
@@ -278,13 +321,13 @@ export async function seriesList({ libraryId, page = 0, size = 30, ...filters } 
   if (!status && (libraryId || list.length === 1)) {
     const [c, rawLib] = libraryId ? route(libraryId) : [list[0], undefined];
     const res = await c.seriesList({ ...filters, libraryId: rawLib, page, size });
-    return { content: res.content.filter((s) => kept(hide, c, s.metadata?.title || s.name)).map((s) => tagSeries(c, s)), last: res.last };
+    return { content: res.content.filter((s) => kept(hide, c, s.id, titleOf(s))).map((s) => tagSeries(c, s)), last: res.last };
   }
   // Plusieurs serveurs : on réunit tout, puis on trie et on découpe ici.
   const all = await merged(JSON.stringify([filters, libraryId, status]), async () => {
     const only = libraryId ? route(libraryId) : null;
     const parts = only ? [[only[0], await everySeries(only[0], { ...filters, libraryId: only[1] })]] : await gather((c) => everySeries(c, filters));
-    let items = parts.flatMap(([c, rows]) => rows.filter((s) => kept(hide, c, s.metadata?.title || s.name)).map((s) => tagSeries(c, s)));
+    let items = parts.flatMap(([c, rows]) => rows.filter((s) => kept(hide, c, s.id, titleOf(s))).map((s) => tagSeries(c, s)));
     if (status) items = items.filter((s) => statusOf(s) === status);
     // Une recherche garde l'ordre de pertinence de chaque serveur.
     return filters.search ? items : items.sort(SORTERS[filters.sort] || SORTERS.title);
@@ -314,9 +357,9 @@ export async function booksOnDeck(size = 20) {
 async function overlayBooks(method, size, own) {
   const owners = active().filter(keeps);
   const parts = owners.length ? await Promise.allSettled(owners.map((c) => c[method](size))) : [];
-  const hide = owners.length ? await shadows().catch(() => new Map()) : new Map();
+  const hide = owners.length ? await shadows().catch(() => NO_HIDE) : NO_HIDE;
   const theirs = parts.flatMap((r, i) => (r.status === 'fulfilled'
-    ? r.value.content.filter((b) => kept(hide, owners[i], b.seriesTitle)).map((b) => tagBook(owners[i], b)) : []));
+    ? r.value.content.filter((b) => kept(hide, owners[i], b.seriesId, b.seriesTitle)).map((b) => tagBook(owners[i], b)) : []));
   return { content: [...own, ...theirs].sort(byDateDesc((b) => b.readProgress?.readDate)).slice(0, size) };
 }
 export async function booksInProgress(size = 20) {
@@ -766,3 +809,168 @@ export async function getClientSetting(key) {
 }
 /** Écrit sur tous les serveurs actifs, pour que chacun puisse servir de source ensuite. */
 export const setClientSetting = (key, value) => saveDoc(null, key, value);
+
+// ───────────── Décisions manuelles sur les séries en double ─────────────
+// « Ces séries sont la même » / « ce ne sont pas la même » (modèle et règles : matching.js). Un seul document pour
+// toute l'installation (pas par profil), rangé dans le stockage clé-valeur des serveurs comme les abonnements : lecture,
+// fusion, écriture, et un changement local pendant l'échange repart ensuite. Les échecs sont silencieux et réessayés
+// plus tard. Sans serveur qui sache ranger (installation « Dossiers » seule), les décisions restent sur l'appareil.
+// Le premier échange tient lieu de migration : le document local et celui des serveurs sont simplement fusionnés.
+const MATCH_KEY = 'scrollarr.matches'; // copie de l'appareil, et clé du document sur les serveurs
+let matchDoc = matching.sanitize(readJson(MATCH_KEY, null));
+let matchRev = 0;         // change à chaque modification du document : entre dans signature()
+let matchGen = 0;         // augmente à chaque changement local, pour repérer ceux qui arrivent pendant un échange
+let matchSyncing = false;
+let matchPulledAt = 0;
+let matchPushTimer;
+/** Événement « change » à chaque modification ; detail.remote vaut vrai si elle vient d'un autre appareil. */
+export const matchEvents = new EventTarget();
+const matchCtx = () => ({ device: deviceId(), now: Date.now() });
+
+function setMatchDoc(doc, { share = true, remote = false } = {}) {
+  matchDoc = doc;
+  matchRev++;
+  try { localStorage.setItem(MATCH_KEY, JSON.stringify(doc)); } catch { /* stockage plein : le document reste en mémoire */ }
+  merged.clear();
+  matchEvents.dispatchEvent(new CustomEvent('change', { detail: { remote } }));
+  if (share) { matchGen++; pushMatches(); }
+}
+function pushMatches() { clearTimeout(matchPushTimer); matchPushTimer = setTimeout(() => syncMatches(true).catch(() => {}), 800); }
+
+/** Échange avec les serveurs. Sans `force`, pas plus d'une lecture toutes les 15 secondes. Renvoie vrai si l'échange a eu lieu. */
+export async function syncMatches(write = false, { force = false } = {}) {
+  if (matchSyncing || !hasStore()) return false;
+  if (!write && !force && Date.now() - matchPulledAt < 15000) return false;
+  matchSyncing = true;
+  try {
+    let text;
+    try { text = await getClientSetting(MATCH_KEY); } catch { return false; } // serveur injoignable : on réessaiera, sans rien écraser
+    let remote = null;
+    try { remote = JSON.parse(text); } catch { /* rien d'enregistré */ }
+    matchPulledAt = Date.now();
+    const gen = matchGen;
+    const union = matching.mergeDocs(matchDoc, remote);
+    if (JSON.stringify(union) !== JSON.stringify(matchDoc)) setMatchDoc(union, { share: false, remote: true });
+    if (write || JSON.stringify(union) !== JSON.stringify(matching.sanitize(remote))) {
+      try { await setClientSetting(MATCH_KEY, JSON.stringify(union)); } catch { matchPulledAt = 0; return false; }
+    }
+    if (matchGen !== gen) pushMatches();
+    return true;
+  } finally { matchSyncing = false; }
+}
+
+const refOf = (s) => { const c = find(s.id); return matching.ref(c.id, rawId(c, s.id), s.title); };
+const prefixed = (serverId, raw) => { const c = servers.find((s) => s.c.id === serverId).c; return pid(c, raw); };
+const connector = (serverId) => servers.find((s) => s.c.id === serverId)?.c;
+const place = (by) => ({ id: prefixed(by.server, by.id), server: by.server, serverLabel: connector(by.server)?.label || by.server, title: by.title });
+
+/** Nombre de décisions manuelles actives. */
+export const matchCount = () => matching.entries(matchDoc).length;
+
+/**
+ * Ce que la façade sait des doublons d'une série affichée : de quelle série elle est masquée (hiddenBy, ou null), et
+ * quelles copies elle masque (hides : serveur, titre, identifiant, raison « auto » ou « manual »). Vide quand le réglage
+ * « Afficher les deux » est choisi ou qu'un seul serveur est utilisé.
+ */
+export async function copies(id, title) {
+  const out = { hiddenBy: null, hides: [] };
+  const [c, raw] = route(id);
+  const plan = await shadows({ all: true });
+  if (!plan.on) return out;
+  const v = plan.verdict(c, raw, title ?? plan.inv.get(c.id)?.byId.get(raw)?.title ?? '');
+  if (v) out.hiddenBy = { ...place(v.by), reason: v.reason };
+  const mine = plan.list.findIndex((x) => x.id === c.id);
+  for (const c2 of plan.list.slice(mine + 1)) {
+    for (const y of plan.inv.get(c2.id)?.byId.values() || []) {
+      const w = plan.verdict(c2, y.id, y.title);
+      if (w && w.by.server === c.id && w.by.id === raw) out.hides.push({ id: pid(c2, y.id), server: c2.id, serverLabel: c2.label, title: y.title, reason: w.reason });
+    }
+  }
+  return out;
+}
+
+const share = (changes) => ({
+  /** Défait la décision (une nouvelle révision, pas un retour en arrière du document). */
+  undo: () => { const r = matching.restore(matchDoc, changes, matchCtx()); if (r.ok) setMatchDoc(r.doc); },
+});
+
+/**
+ * « Ces deux séries sont la même ». `shown` et `other` : { id (préfixé), title }. Refus : { ok: false, reason, with }
+ * avec reason 'same-server' (le groupe aurait deux séries d'un même serveur ; `with` donne celles qui occupent déjà la
+ * place), 'differs' (une décision dit le contraire), 'full' ou 'invalid'. Sinon { ok: true, visible, undo } : `visible`
+ * est la série qui reste affichée (la première si elle n'est pas masquée).
+ */
+export async function groupWith(shown, other) {
+  const a = refOf(shown), b = refOf(other);
+  const r = matching.decide(matchDoc, matching.KIND.SAME, a, b, matchCtx());
+  if (!r.ok) return { ok: false, reason: r.reason, with: (r.with || []).map((m) => ({ id: prefixed(m.s, m.i), server: m.s, serverLabel: connector(m.s)?.label || m.s, title: m.t })) };
+  setMatchDoc(r.doc);
+  const plan = await shadows({ all: true }).catch(() => NO_HIDE);
+  const c = find(shown.id);
+  const v = plan.verdict(c, a.i, shown.title);
+  return { ok: true, visible: v ? place(v.by) : { id: shown.id, server: c.id, serverLabel: c.label, title: shown.title }, ...share(r.changes) };
+}
+
+/**
+ * « Ce n'est pas la même série », depuis la série affichée `shown` pour la copie `copy` qu'elle masque. Une copie
+ * liée à la main sort de son groupe ; si le titre suffit encore à la masquer, la paire est déclarée différente.
+ * Renvoie { ok: true, undo }.
+ */
+export async function separate(shown, copy) {
+  const b = refOf(copy);
+  const ctx = matchCtx();
+  let doc = matchDoc;
+  const lists = [];
+  if (matching.groupOf(doc, b)) { const r = matching.detach(doc, b, ctx); doc = r.doc; lists.push(r.changes); }
+  // Tant que la copie reste masquée par le titre, on déclare la paire différente (au plus quelques séries de même titre).
+  for (let i = 0; i < 5; i++) {
+    const v = (await shadows({ all: true, doc })).verdict(find(copy.id), b.i, copy.title);
+    if (!v) break;
+    const r = matching.decide(doc, matching.KIND.DIFF, b, matching.ref(v.by.server, v.by.id, v.by.title), ctx);
+    if (!r.ok) break;
+    doc = r.doc; lists.push(r.changes);
+  }
+  const changes = matching.combine(...lists);
+  if (!changes.length) return { ok: true, undo: () => {} };
+  setMatchDoc(doc);
+  return { ok: true, ...share(changes) };
+}
+
+/** Retire une décision (réglages). */
+export function removeMatch(key) {
+  const r = matching.remove(matchDoc, key, matchCtx());
+  if (r.changes.length) setMatchDoc(r.doc);
+  return share(r.changes);
+}
+
+/**
+ * Décisions actives, pour les réglages : serveur, titre à la date de la décision, et `state` de chaque côté :
+ * 'ok', 'missing' (la série n'existe plus chez ce serveur : dossier renommé, série supprimée) ou 'unknown'
+ * (serveur désactivé, injoignable : on ne peut pas savoir). `ineffective` : décision sans effet (voir groups().skipped).
+ */
+export async function manualMatches() {
+  const { skipped } = matching.groups(matchDoc);
+  const list = active();
+  const invs = new Map();
+  await Promise.all(list.map(async (c) => { try { invs.set(c.id, await inventory(c)); } catch { /* inconnu */ } }));
+  const side = (r) => {
+    const inv = invs.get(r.s);
+    return { server: r.s, serverLabel: connector(r.s)?.label || r.s, id: r.i, title: inv?.byId.get(r.i)?.title || r.t, state: !inv ? 'unknown' : inv.byId.has(r.i) ? 'ok' : 'missing' };
+  };
+  return matching.entries(matchDoc).map((x) => ({ key: x.key, kind: x.kind, at: x.at, a: side(x.a), b: side(x.b), ineffective: skipped.has(x.key) }))
+    .sort((x, y) => y.at - x.at || (x.key < y.key ? -1 : 1));
+}
+
+/**
+ * Séries d'autres serveurs que celui de `shown`, pour choisir celle qui est la même : { id, server, serverLabel, title }.
+ * Écarte les séries déjà dans son groupe. Interroge seulement les serveurs de bibliothèque, à la demande de l'écran.
+ */
+export async function matchCandidates(shown, query) {
+  const me = find(shown.id);
+  const group = new Set((matching.groupOf(matchDoc, refOf(shown)) || []).map(matching.refKey));
+  const others = active().filter((c) => c.id !== me.id);
+  const results = await Promise.allSettled(others.map(async (c) => (await c.seriesList({ search: query, page: 0, size: 30 })).content.map((s) => ({ c, s }))));
+  return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+    .filter(({ c, s }) => !group.has(matching.refKey({ s: c.id, i: String(s.id) })))
+    .map(({ c, s }) => ({ id: pid(c, s.id), server: c.id, serverLabel: c.label, title: titleOf(s) }));
+}

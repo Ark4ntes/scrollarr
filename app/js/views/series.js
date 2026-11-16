@@ -2,10 +2,10 @@ import * as api from '../api.js';
 import { CAP } from '../connectors/contract.js';
 import * as store from '../store.js';
 import * as downloads from '../downloads.js';
-import { h, icon, cover, toast, actionSheet, fmtDate, chapterNo, chapterTitle, add, fill } from '../ui.js';
+import { h, icon, cover, toast, sheet, actionSheet, fmtDate, chapterNo, chapterTitle, add, fill, debounce } from '../ui.js';
 import { t } from '../i18n.js';
 import { seriesTitle, bookProgress } from '../components.js';
-import { back, refresh } from '../router.js';
+import { back, refresh, go } from '../router.js';
 
 const ORDER_KEY = 'scrollarr.order';
 const STATUS = { ENDED: 'Terminée', ONGOING: 'En cours de parution', ABANDONED: 'Abandonnée', HIATUS: 'En pause' };
@@ -45,6 +45,10 @@ export async function series(root, { id }) {
   const title = seriesTitle(s);
   let desc = localStorage.getItem(ORDER_KEY) === 'desc';
 
+  // Doublons : la ligne « Aussi sur… » ou l'avis d'une copie masquée, remplis dès que la façade a répondu.
+  const dup = h('div.dup', { hidden: true });
+  let alive = true;
+
   // ── En-tête ──
   const authors = [...new Set((s.booksMetadata?.authors || [])
     .filter((a) => ['writer', 'penciller', 'artist', 'author'].includes((a.role || '').toLowerCase()))
@@ -59,6 +63,8 @@ export async function series(root, { id }) {
   ].filter(Boolean);
   // Un lecteur sans suivi de lecture ne propose aucune action « lu / non lu ».
   const tracks = api.can(id, CAP.PROGRESS_WRITE);
+  // Regrouper n'a de sens que si plusieurs serveurs sont utilisés et que les doublons sont masqués.
+  const canGroup = !offline && api.multi() && api.dedupe();
   const onServer = !offline && api.canServerDownload(id);
   const collector = onServer ? api.serverDownloadLabel(id) : '';
 
@@ -86,7 +92,7 @@ export async function series(root, { id }) {
       h('div.shero-tone', { 'aria-hidden': 'true' }),
       h('div.shero-bar',
         h('button.iconbtn.glass', { type: 'button', 'aria-label': t('Retour'), onclick: () => back('/library') }, icon('back')),
-        offline || !tracks ? null : h('button.iconbtn.glass', { type: 'button', 'aria-label': t('Autres actions'), onclick: seriesMenu }, icon('more'))),
+        offline || !(tracks || canGroup) ? null : h('button.iconbtn.glass', { type: 'button', 'aria-label': t('Autres actions'), onclick: seriesMenu }, icon('more'))),
       h('div.shero-main',
         h('div.shero-cover', cover(api.seriesThumb(id))),
         h('div.shero-text',
@@ -96,6 +102,7 @@ export async function series(root, { id }) {
     h('div.sactions', favBtn,
       (downloads.supported() || onServer) && !offline
         ? h('button.btn', { type: 'button', onclick: downloadMenu }, icon('download', 18), t('Télécharger')) : null),
+    dup,
     (s.metadata?.genres || []).length ? h('div.chips.wrap.static', s.metadata.genres.map((g) => h('span.chip', g))) : null,
     summary);
 
@@ -167,10 +174,107 @@ export async function series(root, { id }) {
 
   function seriesMenu() {
     actionSheet(title, [
-      { icon: 'check', label: t('Marquer toute la série comme lue'), run: () => act(() => api.markSeriesRead(id)) },
-      { icon: 'refresh', label: t('Remettre toute la série à non lue'), run: () => act(() => api.markSeriesUnread(id)) },
+      tracks ? { icon: 'check', label: t('Marquer toute la série comme lue'), run: () => act(() => api.markSeriesRead(id)) } : null,
+      tracks ? { icon: 'refresh', label: t('Remettre toute la série à non lue'), run: () => act(() => api.markSeriesUnread(id)) } : null,
+      canGroup ? { icon: 'library', label: t('Regrouper avec une autre série…'), run: groupSheet } : null,
     ]);
   }
+
+  // ── Doublons ──
+  const me = { id, title };
+  const reasonText = (r) => (r === 'manual' ? t('Regroupée à la main') : t('Même titre'));
+
+  function groupToast(r, other) {
+    const stays = r.visible;
+    toast(t('Regroupées : « {title} » ({server}) reste affichée.', { title: stays.title, server: stays.serverLabel }),
+      { action: t('Défaire'), onAction: () => { r.undo(); toast(t('Regroupement annulé.')); refresh(); }, duration: 7000 });
+    if (stays.id !== id) go(`/series/${stays.id}`); else refresh();
+  }
+  const refusal = (r) => {
+    if (r.reason === 'same-server' && r.with?.length) return t('{server} a déjà une série dans ce groupe : « {title} ».', { server: r.with[0].serverLabel, title: r.with[0].title });
+    if (r.reason === 'differs') return t('Une autre décision dit que ces séries sont différentes. Retirez-la d’abord dans les Réglages.');
+    if (r.reason === 'full') return t('Trop de décisions manuelles. Retirez-en dans les Réglages.');
+    return t('L’action a échoué.');
+  };
+
+  function groupSheet() {
+    sheet(t('Regrouper avec une autre série'), (body, close) => {
+      const input = h('input', { type: 'search', value: title, placeholder: t('Titre de série'), 'aria-label': t('Rechercher une série'), autocomplete: 'off', autocapitalize: 'off', enterkeyhint: 'search' });
+      const out = h('div.group-out');
+      let seq = 0;
+      async function run() {
+        const q = input.value.trim();
+        const n = ++seq;
+        if (!q) return fill(out);
+        fill(out, h('p.note', t('Recherche…')));
+        let found;
+        try { found = await api.matchCandidates(me, q); } catch { found = null; }
+        if (n !== seq) return;
+        if (!found) return fill(out, h('p.note', t('Recherche impossible')));
+        if (!found.length) return fill(out, h('p.note', t('Aucun résultat')));
+        fill(out, h('ul.src-list', found.map((c) => h('li', h('button.src-item', { type: 'button', onclick: () => pick(c) },
+          h('div.src-cover', cover(api.seriesThumb(c.id))),
+          h('div.src-text', h('p.src-title', c.title), h('p.src-sub', c.serverLabel)))))));
+      }
+      async function pick(c) {
+        close();
+        try {
+          const r = await api.groupWith(me, c);
+          if (!r.ok) return toast(refusal(r), { duration: 6000 });
+          groupToast(r, c);
+        } catch { toast(t('L’action a échoué.')); }
+      }
+      input.addEventListener('input', debounce(run, 300));
+      body.append(
+        h('p.note.sheet-note', t('Choisissez la même série chez un autre serveur. Une seule s’affiche : celle du serveur prioritaire. La progression, les chapitres et la couverture ne sont pas fusionnés.')),
+        h('form.searchfield', { role: 'search', onsubmit: (e) => { e.preventDefault(); input.blur(); run(); } }, icon('search', 18), input),
+        out);
+      run();
+    });
+  }
+
+  async function notSame(shown, copy) {
+    try {
+      const r = await api.separate(shown, copy);
+      toast(t('« {title} » ({server}) n’est plus regroupée avec « {other} ».', { title: copy.title, server: copy.serverLabel || api.serverLabel(copy.id), other: shown.title }),
+        { action: t('Défaire'), onAction: () => { r.undo(); toast(t('Décision annulée.')); refresh(); }, duration: 7000 });
+      refresh();
+    } catch { toast(t('L’action a échoué.')); }
+  }
+
+  function copiesSheet(info) {
+    sheet(t('Aussi sur {servers}', { servers: [...new Set(info.hides.map((c) => c.serverLabel))].join(', ') }), (body, close) => {
+      body.append(h('p.note.sheet-note', t('Ces séries sont regroupées avec celle-ci : seule celle du serveur prioritaire s’affiche dans la bibliothèque. Leur progression, leurs chapitres et leur couverture ne sont pas fusionnés avec les siens.')));
+      for (const c of info.hides) {
+        body.append(h('div.copy',
+          h('div.src-item',
+            h('div.src-cover', cover(api.seriesThumb(c.id))),
+            h('div.src-text', h('p.src-title', c.title), h('p.src-sub', `${c.serverLabel} · ${reasonText(c.reason)}`))),
+          h('div.copy-actions',
+            h('a.btn.small', { href: `#/series/${c.id}`, onclick: close }, t('Ouvrir')),
+            h('button.btn.small', { type: 'button', onclick: () => { close(); notSame(me, c); } }, t('Ce n’est pas la même série')))));
+      }
+    });
+  }
+
+  async function paintDuplicates() {
+    let info;
+    try { info = await api.copies(id, title); } catch { return; }
+    if (!alive) return;
+    if (info.hiddenBy) {
+      const by = info.hiddenBy;
+      fill(dup, h('p.note', t('Cette série est regroupée avec « {title} » ({server}), qui s’affiche à sa place.', { title: by.title, server: by.serverLabel })),
+        h('div.copy-actions',
+          h('a.btn.small', { href: `#/series/${by.id}` }, t('Voir « {title} »', { title: by.title })),
+          h('button.btn.small', { type: 'button', onclick: () => notSame(by, { id, title, serverLabel: api.serverLabel(id) }) }, t('Ce n’est pas la même série'))));
+      dup.hidden = false;
+    } else if (info.hides.length) {
+      const servers = [...new Set(info.hides.map((c) => c.serverLabel))].join(', ');
+      fill(dup, h('button.textbtn', { type: 'button', onclick: () => copiesSheet(info) }, t('Aussi sur {servers}', { servers }), icon('next', 16)));
+      dup.hidden = false;
+    }
+  }
+  if (!offline && api.multi()) { paintDuplicates(); api.syncMatches(false).catch(() => {}); }
 
   function chapterMenu(b) {
     const d = downloads.get(b.id);
@@ -233,5 +337,5 @@ export async function series(root, { id }) {
     if (st) add(body, st);
   };
   downloads.events.addEventListener('change', onDl);
-  return () => downloads.events.removeEventListener('change', onDl);
+  return () => { alive = false; downloads.events.removeEventListener('change', onDl); };
 }

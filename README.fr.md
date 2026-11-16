@@ -121,7 +121,7 @@ Première version publiée : 0.9.0 (novembre 2026). Les versions et leurs notes 
 - **Non essayé.** Safari sur iOS. L'envoi des notifications push (l'abonnement et la détection des nouveaux chapitres fonctionnent en test ; l'envoi lui-même n'a jamais été lancé). La recherche chez les sources et l'ajout d'une série n'ont été testés que contre le serveur factice, pas contre un vrai Suwayomi, et montrent la première page de résultats de chaque source.
 - Un chapitre Suwayomi non téléchargé est récupéré chez sa source à l'ouverture : le premier affichage peut prendre plusieurs secondes.
 - Il n'y a pas encore de suivi ni de téléchargement automatique des nouveaux chapitres.
-- Les doublons entre serveurs ne sont reconnus que par le titre.
+- Les doublons entre serveurs sont reconnus automatiquement par le titre seulement ; on corrige une erreur ou un oubli à la main sur la page de la série (*Regrouper avec une autre série…*, *Ce n’est pas la même série*). La progression, les chapitres et les couvertures ne sont pas fusionnés : la série du serveur le plus prioritaire est affichée. Une série de Dossiers change d'identifiant quand son dossier est renommé, ce qui casse une décision qui la concerne.
 - Deux appareils qui modifient la même entrée d'un profil partagé sans s'être vus : l'une des deux est conservée, la même sur chaque appareil, mais rien n'indique laquelle est la plus récente.
 - Sur iOS, c'est le système qui décide de l'espace que les téléchargements peuvent occuper, et il peut le récupérer si l'application n'est pas sur l'écran d'accueil.
 - Le service Dossiers ne lit que des dossiers d'images et du CBZ/ZIP (ni CBR, RAR, 7z, PDF), et une installation avec Dossiers seul n'a pas de gestion des profils.
